@@ -1,24 +1,25 @@
 var Repository = require('./repository'),
+    livelyDAVHandler = require('./request-handler'),
     path = require("path"),
     util = require("util"),
     async = require("async"),
     request = require("request"),
     http = require("http"),
     fsHelper = require("lively-fs-helper"),
-    d = require("./domain"),
-    port = 9009, testRepo, testServer,
+    port = 9009, testRepo, testServer, handler,
     baseDirectory = process.cwd(),
     testDirectory = path.join(baseDirectory, "testDir");
 
-var FsTree = require('jsdav/lib/DAV/backends/fs/tree');
-function createServer(repo, handlerFunc, thenDo) {
-    var server = http.createServer(handlerFunc)
-    server.tree = FsTree.new(testDirectory);
-    server.tmpDir = './tmp'; // httpPut writes tmp files
-    server.options = {};
-    server.plugins = {livelydav: repo.getDAVPlugin()};
-    if (!server.baseUri) server.baseUri = '/';
-    if (!server.getBaseUri) server.getBaseUri = function() { return this.baseUri };
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// debugging
+function logProgress(msg) {
+    return function(thenDo) { console.log(msg); thenDo && thenDo(); }
+}
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// test server
+function createServer(thenDo) {
+    var server = testServer = http.createServer();
     server.on('close', function() { console.log('lively fs server for tests closed'); });
     server.listen(port, function() {
         console.log('lively fs server for tests started');
@@ -29,6 +30,8 @@ function closeServer(server, thenDo) {
     server.close(thenDo);
 }
 
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// request helpers
 function put(path, content, thenDo) {
     var url = 'http://localhost:' + port + '/' + (path || '');
     request.put(url, {body: content}, function(err, res) {
@@ -40,6 +43,8 @@ function del(path, thenDo) {
         console.log('DELETE done'); thenDo(err); });
 }
 
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// tests
 var tests = {
     setUp: function (callback) {
         async.series([
@@ -64,18 +69,18 @@ var tests = {
                 // };
                 fsHelper.createDirStructure(baseDirectory, files, next);
             },
+            logProgress('test files created'),
+            createServer,
+            logProgress('server created'),
             function(next) {
-                testRepo = new Repository({
-                    fs: testDirectory,
-                    excludedDirectories: ['.git', 'node_modules'],
+                handler = new livelyDAVHandler({fs: testDirectory});
+                testRepo = handler.repository;
+                testServer.on('request', function(req, res, next) {
+                    handler.handleRequest(req, res, next);
                 });
-                testRepo.once('initialized', next);
+                handler.registerWith(null, testServer, next)
             },
-            function(next) {
-                createServer(testRepo, function(req, res) {
-                    testRepo.handleRequest(testServer, req, res);
-                }, function(err, server) { testServer = server; next(err); });
-            }
+            logProgress('handler setup')
         ], callback);
     },
     tearDown: function (callback) {

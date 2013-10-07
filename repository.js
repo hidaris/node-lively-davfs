@@ -4,7 +4,6 @@ var util = require("util");
 var EventEmitter = require("events").EventEmitter;
 var livelyDAVPlugin = require('./jsDAV-plugin');
 var VersionedFileSystem = require('./VersionedFileSystem');
-var DavHandler = require('jsdav/lib/DAV/handler');
 var d = require('./domain');
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -17,6 +16,7 @@ global.dir = function(obj, depth) {
 // Repo
 function Repository(options) {
     try {
+        EventEmitter.call(this);
         this.initialize(options);
     } catch(e) { this.emit('error', e); }
 }
@@ -30,15 +30,18 @@ util._extend(Repository.prototype, d.bindMethods({
     initialize: function(options) {
         this.fs = new VersionedFileSystem(options);
         this.fs.once('initialized', function() {
-            Object.freeze(this);
             this.emit('initialized');
         }.bind(this));
-        this.fs.initializeFromDisk();
+        Object.freeze(this);
+    },
+
+    start: function(thenDo) {
+        this.fs.initializeFromDisk(thenDo);
     },
 
     close: function(thenDo) {
         this.emit('closed');
-        thenDo(null);
+        thenDo && thenDo(null);
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -52,9 +55,6 @@ util._extend(Repository.prototype, d.bindMethods({
         plugin.on('fileDeleted', this.onFileDeletion.bind(this));
     },
 
-    handleRequest: function(server, req, res) {
-        var handler = new DavHandler(server, req, res);
-    },
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // change recording
     onFileChange: function(evt) {
@@ -77,6 +77,7 @@ util._extend(Repository.prototype, d.bindMethods({
     getFiles: function(thenDo) { this.fs.getFiles(thenDo); },
     getVersionsFor: function(filename, thenDo) { this.fs.getVersionsFor(filename, thenDo); },
     getVersions: function(thenDo) { this.fs.getVersions(thenDo); },
+    getRootDirectory: function() { return this.fs.getRootDirectory(); },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // debugging

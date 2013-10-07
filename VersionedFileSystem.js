@@ -23,6 +23,7 @@ var d = require('./domain');
  
 function VersionedFileSystem(options) {
     try {
+        EventEmitter.call(this);
         this.initialize(options);
     } catch(e) { this.emit('error', e); }
 }
@@ -34,8 +35,8 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // initializing
     initialize: function(options) {
-        if (!options.fs) throw new Error('VersionedFileSystem needs location!');
-        this.location = options.fs;
+        if (!options.fs) this.emit('error', 'VersionedFileSystem needs location!');
+        this.rootDirectory = options.fs;
         this.versions = {};
         this.excludedDirectories = options.excludedDirectories || [];
     },
@@ -93,11 +94,13 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         });
     },
 
+    getRootDirectory: function() { return this.rootDirectory; },
+
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // filesystem access
     walkFiles: function(excludedDirs, thenDo) {
-        var root = this.location,
-            find = findit(this.location),
+        var root = this.rootDirectory,
+            find = findit(this.rootDirectory),
             result = {files: [], directories: []},
             ignoredDirs = excludedDirs || [],
             ended = false;
