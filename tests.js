@@ -1,45 +1,96 @@
 var livelyRepositories = require('./repository'),
     path = require("path"),
+    util = require("util"),
     async = require("async"),
     request = require("request"),
     fsHelper = require("lively-fs-helper"),
     port = 9009, testRepo;
 
+function put(path, content, thenDo) {
+    var url = 'http://localhost:' + port + '/' + (path || '');
+    request.put(url, {body: content}, function(err, res) {
+        console.log('PUT done');
+        thenDo(err);
+    });
+}
+
 var tests = {
     setUp: function (callback) {
         async.series([
             function(next) {
-                var files = {"testDir": {"aFile.txt": 'foo bar content'}};
+                var files = {
+                    "testDir": {"aFile.txt": 'foo bar content'}
+                };
+                // var files = {
+                //     "testDir": {
+                //         "aFile.txt": 'foo bar content',
+                //         "dir1": {
+                //             "otherFile.txt": "content content content",
+                //             "boing.jpg": "imagin this would be binary",
+                //             "dir1.1": {"xxx.txt": 'ui'}
+                //         },
+                //         "dir2": {
+                //             "file1.foo": "1",
+                //             "file2.foo": "2"
+                //         },
+                //         "dir3": {}
+                //     }
+                // };
                 fsHelper.createDirStructure(process.cwd(), files, next);
             },
             function(next) {
-                livelyRepositories.createRepository({
-                    fs: path.join(process.cwd(), "testDir"), port: port,
+                livelyRepositories.start({
+                    fs: path.join(process.cwd(), "testDir"),
+                    port: port,
+                    excludedDirectories: ['.git', 'node_modules'],
                 }, function(err, repo) { testRepo = repo; next(err); })
             }
         ], callback);
     },
     tearDown: function (callback) {
         async.series([
-            function(next) {
-                livelyRepositories.removeRepository(testRepo, next)
-            },
+            livelyRepositories.stop.bind(null, testRepo),
             fsHelper.cleanupTempFiles
         ], callback);
     },
-    testFileList: function (test) {
-        test.expect(2)
-        testRepo.listFiles(function(err, files) {
+    testFileList: function(test) {
+        test.expect(3);
+        testRepo.getFiles(function(err, files) {
             test.equal(files.length, 1, '# files');
             test.equal(files[0].path, 'aFile.txt', 'file name');
+            test.equal(files[0].change, 'initial', 'no change');
             test.done();
         });
-        // test.deepEqual(subserver.routes, ['gettest'], 'routes');
-        // serverManager.get(server,'/test', function(err, res, body) {
-        //     test.equal(body, 'foo', 'subserver get');
-        //     test.done();
-        // });
-    }
+    },
+    testPutCreatesNewVersion: function(test) {
+        test.expect(3);
+        async.series([
+            put.bind(null, 'aFile.txt', 'test'),
+            function(next) {
+                testRepo.getFiles(function(err, files) {
+                    test.equal(files.length, 1, '# files');
+                    test.equal(files[0].path, 'aFile.txt', 'file name');
+                    test.equal(files[0].change, 'contentChange', 'no change recorded');
+                    next();
+                });
+            }
+        ], test.done);
+    },
+    testDAVCreatedFileIsFound: function(test) {
+        test.expect(4);
+        async.series([
+            put.bind(null, 'writtenFile.txt', 'test'),
+            function(next) {
+                testRepo.getFiles(function(err, files) {
+                    test.equal(files.length, 2, '# files');
+                    test.equal(files[0].path, 'aFile.txt', 'file name');
+                    test.equal(files[1].path, 'writtenFile.txt', 'file name 2');
+                    test.equal(files[1].change, 'created', 'file 2 change');
+                    next();
+                });
+            }
+        ], test.done);
+    },
 };
 
 module.exports = tests;
