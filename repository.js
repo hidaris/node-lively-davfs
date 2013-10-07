@@ -7,8 +7,8 @@ var findit = require('findit');
 var jsDAV = require(path.join("jsdav/lib/jsdav"));
 var livelyDAVPlugin = require('./jsDAV-plugin');
 
-global.dir = function(obj) {
-    console.log(util.inspect(obj, {depth: 0}));
+global.dir = function(obj, depth) {
+    console.log(util.inspect(obj, {depth: depth || 0}));
 }
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -21,7 +21,7 @@ d.on('error', function(err) {
 
 d.bindMethods = function(obj) {
     var result = [];
-    Object.keys(obj).forEach(function(name) { 
+    Object.keys(obj).forEach(function(name) {
         var val = obj[name];
         if (typeof val === 'function') val = d.bind(val);
         result[name] = val;
@@ -122,6 +122,7 @@ util._extend(Repository.prototype, d.bindMethods({
     attachToDAVPlugin: function(plugin) {
         plugin.on('fileChanged', this.onFileChange.bind(this));
         plugin.on('fileCreated', this.onFileCreation.bind(this));
+        plugin.on('fileDeleted', this.onFileDeletion.bind(this));
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -136,12 +137,34 @@ util._extend(Repository.prototype, d.bindMethods({
         addVersion(versionedFileInfos, 0, 'created', {path: evt.uri});
     },
 
+    onFileDeletion: function(evt) {
+        console.log('file deleted: ', evt.uri);
+        addVersion(versionedFileInfos, undefined, 'deletion', {path: evt.uri});
+    },
+
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // accessors
     getFiles: function(thenDo) {
-        var lastVersions = Object.keys(versionedFileInfos).map(function(path) {
-            return versionedFileInfos[path].slice(-1)[0]; });
-        thenDo(null, lastVersions);
+        this.getVersions(function(err, versions) {
+            if (err) { thenDo(err); return; }
+            var existingFiles = versions
+                .map(function(fileVersions) {
+                    return fileVersions[fileVersions.length-1]; })
+                .filter(function(version) {
+                    return version && version.change !== 'deletion'; });
+            thenDo(null, existingFiles);
+        });
+    },
+
+    getVersionsFor: function(filename, thenDo) {
+        var versions = versionedFileInfos[filename] || [];
+        thenDo(null, versions);
+    },
+
+    getVersions: function(thenDo) {
+        var versions = Object.keys(versionedFileInfos)
+            .map(function(key) { return versionedFileInfos[key]; });
+        thenDo(null, versions);
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -171,8 +194,15 @@ util._extend(Repository.prototype, d.bindMethods({
         }
         find.on('end', onEnd);
         find.on('stop', onEnd);
-    }
+    },
 
+    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+    // debugging
+    logState: function() {
+        console.log('log repo state:');
+        console.log("versionedFileInfos: ");
+        dir(versionedFileInfos, 1);
+    }
 }));
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -189,6 +219,7 @@ function start(options, thenDo) {
         logProgress('1) start'),
         function(next) {
             repository = new Repository(options);
+            versionedFileInfos = {};
             repository.initializeFromFS(next);
         },
         logProgress('2) repo created'),

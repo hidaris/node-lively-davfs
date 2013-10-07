@@ -9,9 +9,12 @@ var livelyRepositories = require('./repository'),
 function put(path, content, thenDo) {
     var url = 'http://localhost:' + port + '/' + (path || '');
     request.put(url, {body: content}, function(err, res) {
-        console.log('PUT done');
-        thenDo(err);
-    });
+        console.log('PUT done'); thenDo(err); });
+}
+function del(path, thenDo) {
+    var url = 'http://localhost:' + port + '/' + (path || '');
+    request(url, {method: 'DELETE'}, function(err, res) {
+        console.log('DELETE done'); thenDo(err); });
 }
 
 var tests = {
@@ -71,6 +74,22 @@ var tests = {
                     test.equal(files.length, 1, '# files');
                     test.equal(files[0].path, 'aFile.txt', 'file name');
                     test.equal(files[0].change, 'contentChange', 'no change recorded');
+                    next();
+                });
+            }
+        ], test.done);
+    },
+    testDeleteIsRecorded: function(test) {
+        test.expect(5);
+        async.series([
+            del.bind(null, 'aFile.txt'),
+            function(next) {
+                testRepo.getVersionsFor('aFile.txt', function(err, versions) {
+                    test.equal(versions.length, 2, '# versions');
+                    test.equal(versions[0].path, 'aFile.txt', 'v1: path');
+                    test.equal(versions[0].change, 'initial', 'v1: change');
+                    test.equal(versions[1].path, 'aFile.txt', 'v2: path');
+                    test.equal(versions[1].change, 'deletion', 'v2: change');
                     next();
                 });
             }
