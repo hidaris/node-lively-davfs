@@ -1,254 +1,93 @@
 "use strict"
 
 var util = require("util");
-var async = require("async");
-var path = require("path");
-var findit = require('findit');
-var jsDAV = require(path.join("jsdav/lib/jsdav"));
+var EventEmitter = require("events").EventEmitter;
 var livelyDAVPlugin = require('./jsDAV-plugin');
+var VersionedFileSystem = require('./VersionedFileSystem');
+var DavHandler = require('jsdav/lib/DAV/handler');
+var d = require('./domain');
 
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// debugging
 global.dir = function(obj, depth) {
     console.log(util.inspect(obj, {depth: depth || 0}));
 }
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// domain / error handling
-var d = require('domain').create();
-d.on('error', function(err) {
-    console.error('Encountered error: ', err.stack);
-    process.exit();
-});
-
-d.bindMethods = function(obj) {
-    var result = [];
-    Object.keys(obj).forEach(function(name) {
-        var val = obj[name];
-        if (typeof val === 'function') val = d.bind(val);
-        result[name] = val;
-    });
-    return result;
-}
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// eval server helper
-var evalServer;
-function openEvalInterface(port, thenDo) {
-    if (evalServer) {
-        closeEvalInterface(function() { openEvalInterface(port, thenDo); });
-        return;
-    }
-    var subserverStart = require('../lively-server-inspector'),
-        server = require('../lively-pluggable-server'),
-        port = port || 9009, server;
-    subserverStart.route = '/inspect';
-    console.log('starting lively server inspector on port ', port);
-    server.start({port: port, subservers: [subserverStart]}, function(err, server) {
-        evalServer = server; thenDo(null); });
-}
-function closeEvalInterface(thenDo) {
-    if (!evalServer) { thenDo(); return }
-    evalServer.close(function() { evalServer = null; thenDo() })
-}
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// DAV
-function startDAV(davPlugin, fsPath, port, thenDo) {
-    var davServer = jsDAV.createServer({
-        node: fsPath || process.cwd(),
-        plugins: {livelydav: davPlugin}}, port);
-global.davServer = davServer;
-    davServer.once('listening', function() { thenDo(null, davServer); });
-    davServer.on('close', function() { console.log("dav server closed");});
-}
-
-function closeDAV(davServer, thenDo) {
-    davServer.close(function() { console.log('closed dav server'); thenDo(null); });
-}
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// versioning data structures
-/*
- * maps paths to list of versions
- * a version is {
- *   path: STRING,
- *   version: STRING||NUMBER,
- *   stat: FILESTAT,
- *   change: STRING
- * }
- * a change is what kind of operation the version created:
- * ['initial', 'creation', 'deletion', 'contentChange']
- */
-var versionedFileInfos = {};
-function addVersion(versionedFileInfos, versionId, change, fileinfo) {
-    var versions = versionedFileInfos[fileinfo.path]
-                || (versionedFileInfos[fileinfo.path] = []);
-    // if no versionId specified we try to auto increment:
-    if (versionId === undefined) {
-        var lastVersion = versions[versions.length-1];
-        versionId = lastVersion ? lastVersion.version + 1 : 0;
-    }
-    var version = {
-        change: change, version: versionId,
-        path: fileinfo.path, stat: fileinfo.stat,
-    };
-    versions.push(version);
-    return version;
-}
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // Repo
 function Repository(options) {
-    this.davServer = null;
-    this.port = options.port;
-    this.fs = options.fs;
-    this.excludedDirectories = options.excludedDirectories || [];
+    try {
+        this.initialize(options);
+    } catch(e) { this.emit('error', e); }
 }
 
+util._extend(Repository.prototype, EventEmitter.prototype);
+
 util._extend(Repository.prototype, d.bindMethods({
+
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // initializing
-    initializeFromFS: function(thenDo) {
-        var addInitialVersion = addVersion.bind(null, versionedFileInfos, 0, 'initial');
-        this.walkFiles(function(err, result) {
-            result.files.forEach(addInitialVersion);
-            thenDo(null);
-        });
+    // intialize-release
+    initialize: function(options) {
+        this.fs = new VersionedFileSystem(options);
+        this.fs.once('initialized', function() {
+            Object.freeze(this);
+            this.emit('initialized');
+        }.bind(this));
+        this.fs.initializeFromDisk();
+    },
+
+    close: function(thenDo) {
+        this.emit('closed');
+        thenDo(null);
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // DAV
-    setDAVServer: function(davServer) { return this.davServer = davServer; },
-    getDAVServer: function(davServer) { return this.davServer; },
-
+    getDAVPlugin: function() {
+        return livelyDAVPlugin.onNew(this.attachToDAVPlugin.bind(this));
+    },
     attachToDAVPlugin: function(plugin) {
         plugin.on('fileChanged', this.onFileChange.bind(this));
         plugin.on('fileCreated', this.onFileCreation.bind(this));
         plugin.on('fileDeleted', this.onFileDeletion.bind(this));
     },
 
+    handleRequest: function(server, req, res) {
+        var handler = new DavHandler(server, req, res);
+    },
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // change recording
     onFileChange: function(evt) {
         console.log('file change: ', evt.uri);
-        addVersion(versionedFileInfos, undefined, 'contentChange', {path: evt.uri});
+        this.fs.addVersion(undefined, 'contentChange', {path: evt.uri});
     },
 
     onFileCreation: function(evt) {
         console.log('file created: ', evt.uri);
-        addVersion(versionedFileInfos, 0, 'created', {path: evt.uri});
+        this.fs.addVersion(0, 'created', {path: evt.uri});
     },
 
     onFileDeletion: function(evt) {
         console.log('file deleted: ', evt.uri);
-        addVersion(versionedFileInfos, undefined, 'deletion', {path: evt.uri});
+        this.fs.addVersion(undefined, 'deletion', {path: evt.uri});
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // accessors
-    getFiles: function(thenDo) {
-        this.getVersions(function(err, versions) {
-            if (err) { thenDo(err); return; }
-            var existingFiles = versions
-                .map(function(fileVersions) {
-                    return fileVersions[fileVersions.length-1]; })
-                .filter(function(version) {
-                    return version && version.change !== 'deletion'; });
-            thenDo(null, existingFiles);
-        });
-    },
-
-    getVersionsFor: function(filename, thenDo) {
-        var versions = versionedFileInfos[filename] || [];
-        thenDo(null, versions);
-    },
-
-    getVersions: function(thenDo) {
-        var versions = Object.keys(versionedFileInfos)
-            .map(function(key) { return versionedFileInfos[key]; });
-        thenDo(null, versions);
-    },
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // fs access
-    walkFiles: function(thenDo) {
-        var root = this.fs,
-            find = findit(this.fs),
-            result = {files: [], directories: []},
-            ignoredDirs = this.excludedDirectories || [],
-            ended = false;
-        find.on('directory', function (dir, stat, stop) {
-            var base = path.basename(dir);
-            result.directories.push({path: dir, stat: stat});
-            if (ignoredDirs.indexOf(base) >= 0) stop();
-        });
-        find.on('file', function (file, stat) {
-            result.files.push({
-                path: path.relative(root, file),
-                stat: stat
-            });
-        });
-        find.on('link', function (link, stat) {});
-        var done = false;
-        function onEnd() {
-            if (done) return;
-            done = true; thenDo(null, result);
-        }
-        find.on('end', onEnd);
-        find.on('stop', onEnd);
-    },
+    getFiles: function(thenDo) { this.fs.getFiles(thenDo); },
+    getVersionsFor: function(filename, thenDo) { this.fs.getVersionsFor(filename, thenDo); },
+    getVersions: function(thenDo) { this.fs.getVersions(thenDo); },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // debugging
     logState: function() {
         console.log('log repo state:');
         console.log("versionedFileInfos: ");
-        dir(versionedFileInfos, 1);
+        dir(this.fs, 1);
     }
 }));
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// module interface / initialize-release
-function logProgress(msg) {
-    return function(thenDo) { console.log(msg); thenDo && thenDo(); }
-}
-
-function start(options, thenDo) {
-    if (!options.fs) options.fs = process.cwd();
-    if (!options.port) options.port = 9032;
-    var davServer, davPlugin, repository;
-    async.series([
-        logProgress('1) start'),
-        function(next) {
-            repository = new Repository(options);
-            versionedFileInfos = {};
-            repository.initializeFromFS(next);
-        },
-        logProgress('2) repo created'),
-        function(next) {
-            davPlugin = livelyDAVPlugin.onNew(function(plugin) {
-                repository.attachToDAVPlugin(plugin); });
-            next();
-        },
-        logProgress('3) dav plugin setup'),
-        function(next) {
-            startDAV(davPlugin, options.fs, options.port, function(err, s) {
-                repository.setDAVServer(s); next(err); })
-        },
-        logProgress('4) dav server listening'),
-        function(next) { Object.freeze(repository); next(); },
-        openEvalInterface.bind(null, options.port+1),
-        logProgress('5) eval interface listening'),
-    ], function(err) { thenDo(err, repository); });
-}
-
-function stop(repo, thenDo) {
-    async.series([
-        closeEvalInterface,
-        logProgress('eval interface stopped'),
-        closeDAV.bind(null, repo.getDAVServer()),
-        logProgress('dav stopped'),
-    ], thenDo);
-}
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // exports
-module.exports = {start: start, stop: stop};
+module.exports = Repository;

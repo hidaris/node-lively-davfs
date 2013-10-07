@@ -1,10 +1,33 @@
-var livelyRepositories = require('./repository'),
+var Repository = require('./repository'),
     path = require("path"),
     util = require("util"),
     async = require("async"),
     request = require("request"),
+    http = require("http"),
     fsHelper = require("lively-fs-helper"),
-    port = 9009, testRepo;
+    d = require("./domain"),
+    port = 9009, testRepo, testServer,
+    baseDirectory = process.cwd(),
+    testDirectory = path.join(baseDirectory, "testDir");
+
+var FsTree = require('jsdav/lib/DAV/backends/fs/tree');
+function createServer(repo, handlerFunc, thenDo) {
+    var server = http.createServer(handlerFunc)
+    server.tree = FsTree.new(testDirectory);
+    server.tmpDir = './tmp'; // httpPut writes tmp files
+    server.options = {};
+    server.plugins = {livelydav: repo.getDAVPlugin()};
+    if (!server.baseUri) server.baseUri = '/';
+    if (!server.getBaseUri) server.getBaseUri = function() { return this.baseUri };
+    server.on('close', function() { console.log('lively fs server for tests closed'); });
+    server.listen(port, function() {
+        console.log('lively fs server for tests started');
+        thenDo(null, server); });
+}
+
+function closeServer(server, thenDo) {
+    server.close(thenDo);
+}
 
 function put(path, content, thenDo) {
     var url = 'http://localhost:' + port + '/' + (path || '');
@@ -39,20 +62,26 @@ var tests = {
                 //         "dir3": {}
                 //     }
                 // };
-                fsHelper.createDirStructure(process.cwd(), files, next);
+                fsHelper.createDirStructure(baseDirectory, files, next);
             },
             function(next) {
-                livelyRepositories.start({
-                    fs: path.join(process.cwd(), "testDir"),
-                    port: port,
+                testRepo = new Repository({
+                    fs: testDirectory,
                     excludedDirectories: ['.git', 'node_modules'],
-                }, function(err, repo) { testRepo = repo; next(err); })
+                });
+                testRepo.once('initialized', next);
+            },
+            function(next) {
+                createServer(testRepo, function(req, res) {
+                    testRepo.handleRequest(testServer, req, res);
+                }, function(err, server) { testServer = server; next(err); });
             }
         ], callback);
     },
     tearDown: function (callback) {
         async.series([
-            livelyRepositories.stop.bind(null, testRepo),
+            testRepo.close.bind(testRepo),
+            function(next) { testServer.close(next); },
             fsHelper.cleanupTempFiles
         ], callback);
     },
@@ -113,81 +142,3 @@ var tests = {
 };
 
 module.exports = tests;
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
-// var subserver;
-// function makeSubserver(route) {
-//     subserver = function(route, server) {
-//         server.get(route, function(req, res) { res.end('foo'); });
-//     }
-//     subserver.route = route;
-//     return subserver;
-// }
-
-// var tests = {
-//     setUp: function (callback) {
-//         serverManager.start({
-//             port: port,
-//             subservers: [makeSubserver('/test')]
-//         }, function(err, s) { server = s; callback(err); });
-//     },
-//     tearDown: function (callback) {
-//         async.series([
-//             serverManager.stop.bind(null, server),
-//             fsHelper.cleanupTempFiles
-//         ], callback);
-//     },
-//     testSubserverRequest: function (test) {
-//         test.deepEqual(subserver.routes, ['gettest'], 'routes');
-//         serverManager.get(server,'/test', function(err, res, body) {
-//             test.equal(body, 'foo', 'subserver get');
-//             test.done();
-//         });
-//     },
-//     testSubserverUnload: function (test) {
-//         serverManager.unload(server, subserver);
-//         test.deepEqual(subserver.routes, [], 'routes');
-//         test.done();
-//     },
-//     testSubserverConfig: function (test) {
-//         var subserverSource = "module.exports = function(baseRoute, app) {\n"
-//                             + "    app.get(baseRoute, function(req, res) {\n"
-//                             + "        res.end('hello'); });\n"
-//                             + "}",
-//             configSource = '{"subservers":{"subserver.js":{"route":"/test2"}}}',
-//             files = {testSubserverFromFile: {"subserver.js": subserverSource, "config.json": configSource}};
-//         async.waterfall([
-//             fsHelper.createDirStructure.bind(null, '.', files),
-//             serverManager.loadConfig.bind(null, server, "testSubserverFromFile/config.json"),
-//             serverManager.get.bind(null, server,'/test2'), // --> res, body
-//             function assert(res, body, next) {
-//                 test.equal(body, 'hello', 'subserver get'); next();
-//             }
-//         ], test.done);
-//     },
-//     testSubserverConfigReload: function (test) {
-//         var subserverSource = "module.exports = function(baseRoute, app) {\n"
-//                             + "    app.get(baseRoute, function(req, res) {\n"
-//                             + "        res.end('hello'); });\n"
-//                             + "}",
-//             configSource1 = '{"subservers":{"subserver.js":{"route":"/test1"}}}',
-//             configSource2 = '{"subservers":{"subserver.js":{"route":"/test2"}}}',
-//             files = {testSubserverFromFile: {"subserver.js": subserverSource, "config1.json": configSource1, "config2.json": configSource2}};
-//         async.waterfall([
-//             fsHelper.createDirStructure.bind(null, '.', files),
-//             serverManager.reloadConfig.bind(null, server, "testSubserverFromFile/config1.json"),
-//             serverManager.reloadConfig.bind(null, server, "testSubserverFromFile/config2.json"),
-//             serverManager.get.bind(null, server,'/test1'), // --> res, body
-//             function(res, body, next) {
-//                 test.equal(404, res.statusCode, 'subserver get old'); next();
-//             },
-//             serverManager.get.bind(null, server,'/test2'), // --> res, body
-//             function(res, body, next) {
-//                 test.equal(body, 'hello', 'subserver get'); next();
-//             }
-//         ], test.done);
-//     }
-// };
-
-// module.exports = tests;
