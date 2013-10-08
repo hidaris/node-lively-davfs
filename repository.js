@@ -59,17 +59,38 @@ util._extend(Repository.prototype, d.bindMethods({
     // change recording
     onFileChange: function(evt) {
         console.log('file change: ', evt.uri);
-        this.fs.addVersion(undefined, 'contentChange', {path: evt.uri});
+        this.fs.addVersion({
+            version: undefined,
+            change: 'contentChange',
+            author: 'unknown',
+            date: '',
+            content: null,
+            fileinfo: {path: evt.uri}
+        });
     },
 
     onFileCreation: function(evt) {
         console.log('file created: ', evt.uri);
-        this.fs.addVersion(0, 'created', {path: evt.uri});
+        this.fs.addVersion({
+            version: 0,
+            change: 'created',
+            author: 'unknown',
+            date: '',
+            content: null,
+            fileinfo: {path: evt.uri}
+        });
     },
 
     onFileDeletion: function(evt) {
         console.log('file deleted: ', evt.uri);
-        this.fs.addVersion(undefined, 'deletion', {path: evt.uri});
+        this.fs.addVersion({
+            version: undefined,
+            change: 'deletion',
+            author: 'unknown',
+            date: '',
+            content: null,
+            fileinfo: {path: evt.uri}
+        });
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -78,7 +99,8 @@ util._extend(Repository.prototype, d.bindMethods({
     getVersionsFor: function(filename, thenDo) { this.fs.getVersionsFor(filename, thenDo); },
     getVersions: function(thenDo) { this.fs.getVersions(thenDo); },
     getRootDirectory: function() { return this.fs.getRootDirectory(); },
-
+    getFileRecord: function(options, thenDo) { return this.fs.getFileRecord(options, thenDo); },
+    
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // debugging
     logState: function() {

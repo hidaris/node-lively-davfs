@@ -4,6 +4,7 @@ var util = require("util");
 var EventEmitter = require("events").EventEmitter;
 var async = require("async");
 var path = require("path");
+var fs = require("fs");
 var findit = require('findit');
 var d = require('./domain');
 
@@ -14,7 +15,10 @@ var d = require('./domain');
  * a version is {
  *   path: STRING,
  *   version: STRING||NUMBER,
- *   stat: FILESTAT,
+ *   [stat: FILESTAT,]
+ *   author: STRING,
+ *   date: STRING,
+ *   content: STRING,
  *   change: STRING
  * }
  * a change is what kind of operation the version created:
@@ -42,28 +46,46 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
     },
 
     initializeFromDisk: function(thenDo) {
-        var fs = this;
-        var addInitialVersion = this.addVersion.bind(this, 0, 'initial');
-        this.walkFiles(this.excludedDirectories, function(err, result) {
-            result.files.forEach(addInitialVersion);
-            fs.emit('initialized');
-            thenDo && thenDo(null);
-        });
+        var self = this;
+        async.waterfall([
+            this.walkFiles.bind(this, this.excludedDirectories),
+            function(findResult, next) {
+                async.map(findResult.files, function(fi, next) {
+                    fs.readFile(path.join(self.rootDirectory, fi.path), function(err, content) {
+                        next(err, {
+                            change: 'initial',
+                            version: 0,
+                            author: 'unknown',
+                            date: '',
+                            content: content.toString(),
+                            fileinfo: fi
+                        });
+                    });
+                }, next);
+            },
+            function(fileRecords, next) {
+                fileRecords.forEach(self.addVersion.bind(self));
+                next();
+            },
+            function(next) { self.emit('initialized'); next(); }
+        ], thenDo);
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // versioning
-    addVersion: function(versionId, change, fileinfo) {
-        var versions = this.versions[fileinfo.path]
-                    || (this.versions[fileinfo.path] = []);
+    addVersion: function(options) {
+        // options = {change, version, author, date, content, fileinfo}
+        var versions = this.versions[options.fileinfo.path]
+                    || (this.versions[options.fileinfo.path] = []);
         // if no versionId specified we try to auto increment:
-        if (versionId === undefined) {
+        if (options.version === undefined) {
             var lastVersion = versions[versions.length-1];
-            versionId = lastVersion ? lastVersion.version + 1 : 0;
+            options.version = lastVersion ? lastVersion.version + 1 : 0;
         }
         var version = {
-            change: change, version: versionId,
-            path: fileinfo.path, stat: fileinfo.stat,
+            change: options.change, version: options.version,
+            author: options.author, content: options.content,
+            path: options.fileinfo.path, stat: options.fileinfo.stat,
         };
         versions.push(version);
         return version;
@@ -91,6 +113,20 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                 .filter(function(version) {
                     return version && version.change !== 'deletion'; });
             thenDo(null, existingFiles);
+        });
+    },
+
+    getFileRecord: function(options, thenDo) {
+        var errMsg;
+        if (!options.path) errMsg = 'No path specified';
+        if (!errMsg && !options.version) errMsg = 'No version specified';
+        if (errMsg) { thenDo(errMsg); return; }
+        var fs = this;
+        this.getVersionsFor(options.path, function(err, versions) {
+            if (err || !versions) { thenDo(err, null); return; }
+            var records = versions.filter(function(v) {
+                return String(v.version) === String(options.version); });
+            thenDo(null, records && records[0]);
         });
     },
 

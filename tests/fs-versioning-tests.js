@@ -66,17 +66,27 @@ var versionedFilesystemTests = {
         ], callback);
     },
     testNewVersionOnFileChange: function(test) {
-        test.expect(3);
+        test.expect(7);
         async.series([
             function(next) {
                 fakeDAVPlugin.emit('fileChanged', {uri: 'aFile.txt'});
                 next();
             },
             function(next) {
-                testRepo.getFiles(function(err, files) {
-                    test.equal(files.length, 1, '# files');
-                    test.equal(files[0].path, 'aFile.txt', 'file name');
-                    test.equal(files[0].change, 'contentChange', 'no change recorded');
+                testRepo.getVersionsFor('aFile.txt', function(err, versions) {
+                    test.equal(versions.length, 2, '# versions');
+                    test.equal(versions[0].version, '0', 'v1: version');
+                    test.equal(versions[1].version, '1', 'v2: version');
+                    next();
+                });
+            },
+            function(next) {
+                testRepo.getFileRecord({path: 'aFile.txt', version: '0'}, function(err, record) {
+                    test.ok(record, 'no record');
+                    test.equal(record.path, 'aFile.txt', 'path');
+                    // test.equal(record.date, 'fooo?', 'date');
+                    test.equal(record.author, 'unknown', 'author');
+                    test.equal(record.content, 'foo bar content', 'content');
                     next();
                 });
             }
