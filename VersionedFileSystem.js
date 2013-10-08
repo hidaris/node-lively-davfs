@@ -6,6 +6,7 @@ var async = require("async");
 var path = require("path");
 var fs = require("fs");
 var findit = require('findit');
+var MemoryStore = require('./memory-storage');
 var d = require('./domain');
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -40,37 +41,43 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
     // initializing
     initialize: function(options) {
         if (!options.fs) this.emit('error', 'VersionedFileSystem needs location!');
+        this.storage = new MemoryStore();
         this.rootDirectory = options.fs;
-        this.versions = {};
         this.excludedDirectories = options.excludedDirectories || [];
     },
 
     initializeFromDisk: function(thenDo) {
+        console.log('LivelyFS initialize at %s', this.getRootDirectory());
         var self = this;
         async.waterfall([
             this.walkFiles.bind(this, this.excludedDirectories),
             function(findResult, next) {
+                console.log('LivelyFS initialize synching %s files', findResult.files.length);
                 async.map(findResult.files, function(fi, next) {
-                    // next(null, {
-                    //     change: 'initial',
-                    //     version: 0,
-                    //     author: 'unknown',
-                    //     date: '',
-                    //     content: null,
-                    //     path: fi.path
-                    // });
-                    fs.readFile(path.join(self.rootDirectory, fi.path), function(err, content) {
-                        console.log('%s: %s', fi.path, fi.stat.mtime.toISOString());
-                        next(err, {
+                    var bypassContentRead = false;
+                    if (bypassContentRead) {
+                        next(null, {
                             change: 'initial',
                             version: 0,
                             author: 'unknown',
                             date: fi.stat ? fi.stat.mtime.toISOString() : '',
-                            content: content && content.toString(),
+                            content: null,
                             path: fi.path,
                             stat: fi.stat
                         });
-                    });
+                    } else {
+                        fs.readFile(path.join(self.rootDirectory, fi.path), function(err, content) {
+                            next(err, {
+                                change: 'initial',
+                                version: 0,
+                                author: 'unknown',
+                                date: fi.stat ? fi.stat.mtime.toISOString() : '',
+                                content: content && content.toString(),
+                                path: fi.path,
+                                stat: fi.stat
+                            });
+                        });
+                    }
                 }, next);
             },
             function(fileRecords, next) {
@@ -83,37 +90,16 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // versioning
-    addVersion: function(options) {
+    addVersion: function(versionData) {
         // options = {change, version, author, date, content, path}
-        var versions = this.versions[options.path]
-                    || (this.versions[options.path] = []);
-        // if no versionId specified we try to auto increment:
-        if (options.version === undefined) {
-            var lastVersion = versions[versions.length-1];
-            options.version = lastVersion ? lastVersion.version + 1 : 0;
-        }
-        var version = {
-            change: options.change, version: options.version,
-            author: options.author, content: options.content,
-            date: options.date, path: options.path, stat: options.stat,
-        };
-        versions.push(version);
-        return version;
+        var record = this.storage.store(versionData);
+        return record;
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // accessing
-    getVersionsFor: function(fn, thenDo) {
-        var versions = this.versions[fn] || [];
-        thenDo(null, versions);
-    },
-
-    getVersions: function(thenDo) {
-        var versions = Object.keys(this.versions)
-            .map(function(key) { return this.versions[key]; }, this);
-        thenDo(null, versions);
-    },
-
+    getVersionsFor: function(fn, thenDo) { this.storage.getVersionsFor(fn, thenDo); },
+    getVersions: function(thenDo) { this.storage.dump(thenDo); },
     getFiles: function(thenDo) {
         this.getVersions(function(err, versions) {
             if (err) { thenDo(err); return; }
