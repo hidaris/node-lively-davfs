@@ -4,7 +4,7 @@
   "description": "Manager for versioning and reading / writing resources.",
   "main": "index.js",
   "scripts": {
-    "test": "node_modules/nodeunit/bin/nodeunit tests.js --reporter minimal"
+    "test": "node_modules/nodeunit/bin/nodeunit tests/*.js  --reporter minimal"
   },
   "keywords": [
     "LivelyKernel",
@@ -19,7 +19,8 @@
     "restify": "~2.6",
     "findit": "~1.1",
     "request": "~2.25",
-    "async": "~0.2"
+    "async": "~0.2",
+    "sqlite3": "~2.1"
   },
   "devDependencies": {
     "lively-fs-helper": "https://github.com/rksm/lively-fs-helper/tarball/master"

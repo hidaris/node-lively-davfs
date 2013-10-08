@@ -43,6 +43,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
             console.log('LivelyFsHandler registerWith done');
             thenDo && thenDo(err);
         });
+        return this;
     },
 
     patchServer: function(server, thenDo) {

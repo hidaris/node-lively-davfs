@@ -1,13 +1,12 @@
-var Repository = require('./repository'),
-    livelyDAVHandler = require('./request-handler'),
+var Repository = require('../repository'),
+    livelyDAVHandler = require('../request-handler'),
     path = require("path"),
-    util = require("util"),
     async = require("async"),
     request = require("request"),
     http = require("http"),
     fsHelper = require("lively-fs-helper"),
     port = 9009, testRepo, testServer, handler,
-    baseDirectory = process.cwd(),
+    baseDirectory = __dirname,
     testDirectory = path.join(baseDirectory, "testDir");
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -52,21 +51,6 @@ var tests = {
                 var files = {
                     "testDir": {"aFile.txt": 'foo bar content'}
                 };
-                // var files = {
-                //     "testDir": {
-                //         "aFile.txt": 'foo bar content',
-                //         "dir1": {
-                //             "otherFile.txt": "content content content",
-                //             "boing.jpg": "imagin this would be binary",
-                //             "dir1.1": {"xxx.txt": 'ui'}
-                //         },
-                //         "dir2": {
-                //             "file1.foo": "1",
-                //             "file2.foo": "2"
-                //         },
-                //         "dir3": {}
-                //     }
-                // };
                 fsHelper.createDirStructure(baseDirectory, files, next);
             },
             logProgress('test files created'),
