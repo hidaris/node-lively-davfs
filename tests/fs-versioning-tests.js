@@ -1,5 +1,6 @@
 var Repository = require('../repository'),
     path = require("path"),
+    fs = require("fs"),
     util = require("util"),
     async = require("async"),
     EventEmitter = require("events").EventEmitter,
@@ -20,6 +21,16 @@ function logProgress(msg) {
 function createDB(dbLocation, thenDo) {
     testDb = new sqlite3.Database(':memory:');
     thenDo();
+}
+
+function fakeDAVChange(relPath, content, author, date) {
+    var request = util._extend({}, EventEmitter.prototype);
+    EventEmitter.call(request);
+    fakeDAVPlugin.emit('fileChanged', {uri: relPath, req: request});
+    request.emit('data', new Buffer(content));
+    request.emit('end');
+    fs.writeFileSync(path.join(testDirectory, relPath), content);
+    fakeDAVPlugin.emit('afterFileChanged', {uri: relPath});
 }
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -66,11 +77,12 @@ var versionedFilesystemTests = {
         ], callback);
     },
     testNewVersionOnFileChange: function(test) {
-        test.expect(7);
+        test.expect(13);
+        var date = new Date();
         async.series([
             function(next) {
-                fakeDAVPlugin.emit('fileChanged', {uri: 'aFile.txt'});
-                next();
+                fakeDAVChange('aFile.txt', 'new content', 'test author', date);
+                testRepo.once('synchronized', next);
             },
             function(next) {
                 testRepo.getVersionsFor('aFile.txt', function(err, versions) {
@@ -84,9 +96,21 @@ var versionedFilesystemTests = {
                 testRepo.getFileRecord({path: 'aFile.txt', version: '0'}, function(err, record) {
                     test.ok(record, 'no record');
                     test.equal(record.path, 'aFile.txt', 'path');
-                    // test.equal(record.date, 'fooo?', 'date');
                     test.equal(record.author, 'unknown', 'author');
                     test.equal(record.content, 'foo bar content', 'content');
+                    var stat = fs.statSync(path.join(testDirectory, record.path));
+                    test.equal(record.date, stat.mtime.toISOString(), 'date');
+                    next();
+                });
+            },
+            function(next) {
+                testRepo.getFileRecord({path: 'aFile.txt', version: '1'}, function(err, record) {
+                    test.ok(record, 'no record v2');
+                    test.equal(record.path, 'aFile.txt', 'path v2');
+                    test.equal(record.author, 'unknown', 'author v2');
+                    test.equal(record.content, 'new content', 'content v2');
+                    var stat = fs.statSync(path.join(testDirectory, record.path));
+                    test.equal(record.date, stat.mtime.toISOString(), 'date v2');
                     next();
                 });
             }

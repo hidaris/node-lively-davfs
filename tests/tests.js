@@ -34,12 +34,12 @@ function closeServer(server, thenDo) {
 function put(path, content, thenDo) {
     var url = 'http://localhost:' + port + '/' + (path || '');
     request.put(url, {body: content}, function(err, res) {
-        console.log('PUT done'); thenDo(err); });
+        console.log('PUT done'); thenDo && thenDo(err); });
 }
 function del(path, thenDo) {
     var url = 'http://localhost:' + port + '/' + (path || '');
     request(url, {method: 'DELETE'}, function(err, res) {
-        console.log('DELETE done'); thenDo(err); });
+        console.log('DELETE done'); thenDo && thenDo(err); });
 }
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -86,7 +86,10 @@ var tests = {
     testPutCreatesNewVersion: function(test) {
         test.expect(3);
         async.series([
-            put.bind(null, 'aFile.txt', 'test'),
+            function(next) {
+                put('aFile.txt', 'test');
+                testRepo.once('synchronized', next);
+            },
             function(next) {
                 testRepo.getFiles(function(err, files) {
                     test.equal(files.length, 1, '# files');
@@ -100,7 +103,7 @@ var tests = {
     testDeleteIsRecorded: function(test) {
         test.expect(5);
         async.series([
-            del.bind(null, 'aFile.txt'),
+            function(next) { del('aFile.txt'); testRepo.once('synchronized', next); },
             function(next) {
                 testRepo.getVersionsFor('aFile.txt', function(err, versions) {
                     test.equal(versions.length, 2, '# versions');
@@ -116,7 +119,7 @@ var tests = {
     testDAVCreatedFileIsFound: function(test) {
         test.expect(4);
         async.series([
-            put.bind(null, 'writtenFile.txt', 'test'),
+            function(next) { put('writtenFile.txt', 'test'); testRepo.once('synchronized', next); },
             function(next) {
                 testRepo.getFiles(function(err, files) {
                     test.equal(files.length, 2, '# files');
@@ -127,7 +130,7 @@ var tests = {
                 });
             }
         ], test.done);
-    },
+    }
 };
 
 module.exports = tests;

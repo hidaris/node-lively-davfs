@@ -51,14 +51,24 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             this.walkFiles.bind(this, this.excludedDirectories),
             function(findResult, next) {
                 async.map(findResult.files, function(fi, next) {
+                    // next(null, {
+                    //     change: 'initial',
+                    //     version: 0,
+                    //     author: 'unknown',
+                    //     date: '',
+                    //     content: null,
+                    //     path: fi.path
+                    // });
                     fs.readFile(path.join(self.rootDirectory, fi.path), function(err, content) {
+                        console.log('%s: %s', fi.path, fi.stat.mtime.toISOString());
                         next(err, {
                             change: 'initial',
                             version: 0,
                             author: 'unknown',
-                            date: '',
-                            content: content.toString(),
-                            fileinfo: fi
+                            date: fi.stat ? fi.stat.mtime.toISOString() : '',
+                            content: content && content.toString(),
+                            path: fi.path,
+                            stat: fi.stat
                         });
                     });
                 }, next);
@@ -74,9 +84,9 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // versioning
     addVersion: function(options) {
-        // options = {change, version, author, date, content, fileinfo}
-        var versions = this.versions[options.fileinfo.path]
-                    || (this.versions[options.fileinfo.path] = []);
+        // options = {change, version, author, date, content, path}
+        var versions = this.versions[options.path]
+                    || (this.versions[options.path] = []);
         // if no versionId specified we try to auto increment:
         if (options.version === undefined) {
             var lastVersion = versions[versions.length-1];
@@ -85,7 +95,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         var version = {
             change: options.change, version: options.version,
             author: options.author, content: options.content,
-            path: options.fileinfo.path, stat: options.fileinfo.stat,
+            date: options.date, path: options.path, stat: options.stat,
         };
         versions.push(version);
         return version;

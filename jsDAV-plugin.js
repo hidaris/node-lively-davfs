@@ -12,6 +12,9 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
     name: "livelydav",
     initialize: function(handler) {
         this.handler = handler;
+        // handler.addEventListener("beforeMethod", this.beforeMethod.bind(this));
+        handler.addEventListener("afterCreateFile", this.afterCreateFile.bind(this));
+        handler.addEventListener("afterWriteContent", this.afterWriteContent.bind(this));
         handler.addEventListener("beforeCreateFile", this.beforeCreateFile.bind(this));
         handler.addEventListener("beforeWriteContent", this.beforeWriteContent.bind(this));
         handler.addEventListener("beforeUnbind", this.beforeUnbind.bind(this));
@@ -21,15 +24,23 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
         return e.next();
     },
     beforeWriteContent: function(e, uri, node) {
-        this.emit('fileChanged', {uri: uri, req: this.handler.request});
+        this.emit('fileChanged', {uri: uri, req: this.handler.httpRequest});
         return e.next();
     },
-    beforeUnbind: function(e, uri) {
-        this.emit('fileDeleted', {uri: uri, req: this.handler.request});
+    afterWriteContent: function(e, uri) {
+        this.emit('afterFileChanged', {uri: uri});
         return e.next();
     },
     beforeCreateFile: function(e, uri, data, encoding, node) {
-        this.emit('fileCreated', {uri: uri});
+        this.emit('fileCreated', {uri: uri, req: this.handler.httpRequest});
+        return e.next();
+    },
+    afterCreateFile: function(e, uri) {
+        this.emit('afterFileCreated', {uri: uri});
+        return e.next();
+    },
+    beforeUnbind: function(e, uri) {
+        this.emit('fileDeleted', {uri: uri, req: this.handler.httpRequest});
         return e.next();
     }
 }, EventEmitter.prototype);
