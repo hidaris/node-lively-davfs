@@ -13,7 +13,7 @@ util._extend(MemoryStore.prototype, EventEmitter.prototype);
 
 util._extend(MemoryStore.prototype, d.bindMethods({
 
-    store: function(versionData) {
+    store: function(versionData, thenDo) {
         var versions = this.versions[versionData.path]
                     || (this.versions[versionData.path] = []);
         // if no versionId specified we try to auto increment:
@@ -27,6 +27,13 @@ util._extend(MemoryStore.prototype, d.bindMethods({
             date: versionData.date, path: versionData.path, stat: versionData.stat,
         };
         versions.push(version);
+        thenDo && thenDo(null, version)
+    },
+
+    storeAll: function(versionDataSets, thenDo) {
+        versionDataSets.forEach(function(versionData) {
+            this.store(versionData); }, this);
+        thenDo(null);
     },
 
     getVersionsFor: function(fn, thenDo) {

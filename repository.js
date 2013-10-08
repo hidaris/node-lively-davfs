@@ -69,14 +69,24 @@ util._extend(Repository.prototype, d.bindMethods({
     isSynchronized: function() { return this.pendingChangeQueue.length === 0 },
 
     commitPendingChanges: function() {
-        var change = this.pendingChangeQueue[0];
-        if (!change || !change.canBeCommitted()) return;
-        this.pendingChangeQueue.shift();
-        this.fs.addVersion(change.record);
-        if (!this.pendingChangeQueue.length) {
-            console.log("all pending changes process");
-            this.emit('synchronized');
+        var repo = this,
+            q = this.pendingChangeQueue,
+            toCommit = [];
+        for (var i = 0; i < q.length; i++) {
+            if (!q[i].canBeCommitted()) break;
+            toCommit.push(q[i].record);
         }
+        if (!toCommit.length) return;
+        repo.pendingChangeQueue.splice(0, toCommit.length);
+        repo.fs.addVersions(toCommit, function(err, version) {
+            if (err) {
+                console.error('error in addVersions for records ', toCommit);
+            }
+            if (!repo.pendingChangeQueue.length) {
+                console.log("all pending changes process");
+                repo.emit('synchronized');
+            }
+        });
     },
 
     discardPendingChange: function(change) {

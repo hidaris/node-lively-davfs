@@ -81,8 +81,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                 }, next);
             },
             function(fileRecords, next) {
-                fileRecords.forEach(self.addVersion.bind(self));
-                next();
+                self.addVersions(fileRecords, function(err) { next(err); });
             },
             function(next) { self.emit('initialized'); next(); }
         ], thenDo);
@@ -90,10 +89,12 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // versioning
-    addVersion: function(versionData) {
+    addVersion: function(versionData, thenDo) {
         // options = {change, version, author, date, content, path}
-        var record = this.storage.store(versionData);
-        return record;
+        this.storage.store(versionData, thenDo);
+    },
+    addVersions: function(versionDatasets, thenDo) {
+        this.storage.storeAll(versionDatasets, thenDo);
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
