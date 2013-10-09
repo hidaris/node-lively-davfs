@@ -95,6 +95,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         // this.storage = new MemoryStore();
         this.rootDirectory = options.fs;
         this.excludedDirectories = options.excludedDirectories || [];
+        this.excludedFiles = options.excludedFiles || [];
     },
 
     initializeFromDisk: function(resetDb, thenDo) {
@@ -111,7 +112,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         var self = this;
         async.waterfall([
             function(next) { self.storage.reset(true, next); },
-            self.walkFiles.bind(self, self.excludedDirectories),
+            self.walkFiles.bind(self, self.excludedDirectories, self.excludedFiles),
             function(findResult, next) {
                 var batchMaxSize = 40, batchMaxFileSize = Math.pow(2, 26)/*64MB*/
                 function sumFileSize(batch) { return sum(pluck(pluck(batch, 'stat'), 'size')); }
@@ -161,12 +162,35 @@ async.forEachSeries(fileReadBatches, function(batch, next) {
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // versioning
+    _excludeTest: function(excl, pathPart) {
+        if (typeof excl === 'string' && excl === pathPart) return true;
+        if (util.isRegExp(excl) && excl.test(pathPart)) return true;
+        return false;
+    },
+    isExcludedDir: function(dirPath) {
+        var sep = path.sep, dirParts = dirPath.split(sep);
+        for (var i = 0; i < this.excludedDirectories.length; i++) {
+            var testDir = this._excludeTest.bind(null,this.excludedDirectories[i]);
+            if (testDir(dirPath) || dirParts.some(testDir)) return true;
+        }
+        return false;
+    },
+    isExcludedFile: function(filePath) {
+        var basename = path.basename(filePath);
+        for (var i = 0; i < this.excludedFiles.length; i++)
+            if (this._excludeTest(this.excludedFiles[i], basename)) return true;
+        return false;
+    },
     addVersion: function(versionData, thenDo) {
         // options = {change, version, author, date, content, path}
-        this.storage.store(versionData, thenDo);
+        if (this.isExcludedFile(versionData.path)) thenDo(null)
+        else this.storage.store(versionData, thenDo);
     },
     addVersions: function(versionDatasets, thenDo) {
-        this.storage.storeAll(versionDatasets, thenDo);
+        var versionDatasets = versionDatasets.filter(function(record) {
+            return !this.isExcludedFile(record.path); }, this);
+        if (!versionDatasets.length) thenDo(null);
+        else this.storage.storeAll(versionDatasets, thenDo);
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -203,24 +227,24 @@ async.forEachSeries(fileReadBatches, function(batch, next) {
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // filesystem access
-    walkFiles: function(excludedDirs, thenDo) {
-        var root = this.rootDirectory,
+    walkFiles: function(excludedDirs, excludedFiles, thenDo) {
+        var self = this,
+            root = this.rootDirectory,
             find = findit(this.rootDirectory),
             result = {files: [], directories: []},
             ignoredDirs = excludedDirs || [],
+            // ignoredFiles = excludedFiles || [],
             ended = false;
         find.on('directory', function (dir, stat, stop) {
-            var base = path.basename(dir);
-            result.directories.push({path: dir, stat: stat});
-            if (ignoredDirs.indexOf(base) >= 0) stop();
+            var relPath = path.relative(root, dir);
+            result.directories.push({path: relPath, stat: stat});
+            var base = path.basename(relPath);
+            if (self.isExcludedDir(base)) stop();
         });
         find.on('file', function (file, stat) {
-            // !FIXME!
-            if (file.indexOf('.sqlite') >= 0) return;
-            result.files.push({
-                path: path.relative(root, file),
-                stat: stat
-            });
+            var relPath = path.relative(root, file);
+            if (self.isExcludedFile(relPath)) return;
+            result.files.push({path: relPath,stat: stat});
         });
         find.on('link', function (link, stat) {});
         var done = false;

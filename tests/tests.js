@@ -49,23 +49,12 @@ var tests = {
         async.series([
             function(next) {
                 var files = {
-                    "testDir": {"aFile.txt": 'foo bar content'}
+                    "testDir": {
+                        "aFile.txt": 'foo bar content',
+                        "ignoredDir": {'ignoredFile.txt': 'ignored'},
+                        'ignoredFile2.txt': 'ignored'
+                    },
                 };
-                // var files = {
-                //     "testDir": {
-                //         "aFile.txt": 'foo bar content',
-                //         "dir1": {
-                //             "otherFile.txt": "content content content",
-                //             "boing.jpg": "imagin this would be binary",
-                //             "dir1.1": {"xxx.txt": 'ui'}
-                //         },
-                //         "dir2": {
-                //             "file1.foo": "1",
-                //             "file2.foo": "2"
-                //         },
-                //         "dir3": {}
-                //     }
-                // };
                 fsHelper.createDirStructure(baseDirectory, files, next);
             },
             logProgress('test files created'),
@@ -74,7 +63,10 @@ var tests = {
             function(next) {
                 handler = new livelyDAVHandler({
                     resetDatabase: true,
-                    fs: testDirectory});
+                    fs: testDirectory,
+                    excludedDirectories: [/ignoredDir/],
+                    excludedFiles: [/^ignoredFile[0-9]*/]
+                    });
                 testRepo = handler.repository;
                 testServer.on('request', function(req, res, next) {
                     handler.handleRequest(req, res, next);
@@ -145,6 +137,33 @@ var tests = {
                     test.equal(files[1].path, 'writtenFile.txt', 'file name 2');
                     test.equal(files[1].change, 'created', 'file 2 change');
                     test.equal(files[1].content, 'test', 'no content recorded');
+                    next();
+                });
+            }
+        ], test.done);
+    },
+    testExcludedFilesAndDirsAreIgnored: function(test) {
+        test.expect(2);
+        testRepo.fs.excludedFiles.push('aFile.txt');
+        testRepo.fs.excludedFiles.push(/.*\.foo/);
+        async.series([
+            function(next) {
+                put('aFile.txt', 'test');
+                testRepo.once('synchronized', next);
+            },
+            function(next) {
+                testRepo.getVersionsFor('aFile.txt', function(err, versions) {
+                    test.equal(versions.length, 1, '# "aFile.txt" not ignored');
+                    next();
+                });
+            },
+            function(next) {
+                put('aFile.foo', 'test');
+                testRepo.once('synchronized', next);
+            },
+            function(next) {
+                testRepo.getVersionsFor('aFile.foo', function(err, versions) {
+                    test.equal(versions.length, 0, '# "aFile.foo" not ignored');
                     next();
                 });
             }

@@ -25,6 +25,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         options = options || {};
         options.fs = options.fs || process.cwd();
         options.excludedDirectories = options.excludedDirectories || ['.svn', '.git', 'node_modules'];
+        options.excludedFiles = options.excludedFiles || ['.DS_Store'];
         this.resetDatabase = !!options.resetDatabase;
         this.repository = new Repository(options);
     },
