@@ -1,7 +1,7 @@
 var d = require('domain').create();
 
 d.on('error', function(err) {
-    console.error('LivelyFS encountered error: ', err.stack);
+    console.error('LivelyFS encountered error: ', err.stack || err);
     process.exit();
 });
 

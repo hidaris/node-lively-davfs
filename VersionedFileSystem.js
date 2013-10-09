@@ -7,6 +7,7 @@ var path = require("path");
 var fs = require("fs");
 var findit = require('findit');
 var MemoryStore = require('./memory-storage');
+var SQLiteStore = require('./sqlite-storage');
 var d = require('./domain');
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -41,7 +42,8 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
     // initializing
     initialize: function(options) {
         if (!options.fs) this.emit('error', 'VersionedFileSystem needs location!');
-        this.storage = new MemoryStore();
+        this.storage = new SQLiteStore();
+        // this.storage = new MemoryStore();
         this.rootDirectory = options.fs;
         this.excludedDirectories = options.excludedDirectories || [];
     },
@@ -50,6 +52,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         console.log('LivelyFS initialize at %s', this.getRootDirectory());
         var self = this;
         async.waterfall([
+            function(next) { self.storage.reset(next); },
             this.walkFiles.bind(this, this.excludedDirectories),
             function(findResult, next) {
                 console.log('LivelyFS initialize synching %s files', findResult.files.length);
@@ -143,6 +146,8 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             if (ignoredDirs.indexOf(base) >= 0) stop();
         });
         find.on('file', function (file, stat) {
+            // !FIXME!
+            if (file.indexOf('.sqlite') >= 0) return;
             result.files.push({
                 path: path.relative(root, file),
                 stat: stat

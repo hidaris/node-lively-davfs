@@ -51,6 +51,21 @@ var tests = {
                 var files = {
                     "testDir": {"aFile.txt": 'foo bar content'}
                 };
+                // var files = {
+                //     "testDir": {
+                //         "aFile.txt": 'foo bar content',
+                //         "dir1": {
+                //             "otherFile.txt": "content content content",
+                //             "boing.jpg": "imagin this would be binary",
+                //             "dir1.1": {"xxx.txt": 'ui'}
+                //         },
+                //         "dir2": {
+                //             "file1.foo": "1",
+                //             "file2.foo": "2"
+                //         },
+                //         "dir3": {}
+                //     }
+                // };
                 fsHelper.createDirStructure(baseDirectory, files, next);
             },
             logProgress('test files created'),

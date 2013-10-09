@@ -24,7 +24,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
     initialize: function(options) {
         options = options || {};
         options.fs = options.fs || process.cwd();
-        options.excludedDirectories = options.excludedDirectories || ['.git', 'node_modules'];
+        options.excludedDirectories = options.excludedDirectories || ['.svn', '.git', 'node_modules'];
         this.repository = new Repository(options);
     },
 

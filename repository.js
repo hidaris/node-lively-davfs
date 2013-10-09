@@ -30,6 +30,9 @@ util._extend(Repository.prototype, d.bindMethods({
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // intialize-release
     initialize: function(options) {
+        if (global.lively) {
+            lively.repository = this;
+        }
         this.fs = new VersionedFileSystem(options);
         // we keep a queue for changes b/c they should be committed to the
         // versioned file system in their incoming order. Before they can be
@@ -66,7 +69,7 @@ util._extend(Repository.prototype, d.bindMethods({
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // change recording
-    isSynchronized: function() { return this.pendingChangeQueue.length === 0 },
+    isSynchronized: function() { return this.pendingChangeQueue.length === 0; },
 
     commitPendingChanges: function() {
         var repo = this,

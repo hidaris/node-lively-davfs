@@ -5,13 +5,15 @@ var EventEmitter = require("events").EventEmitter;
 var d = require('./domain');
 
 function MemoryStore() {
-    this.versions = {};
+    this.versions = null;
     EventEmitter.call(this);
 }
 
 util._extend(MemoryStore.prototype, EventEmitter.prototype);
 
 util._extend(MemoryStore.prototype, d.bindMethods({
+
+    reset: function(thenDo) { this.versions = {}; thenDo && thenDo(null); },
 
     store: function(versionData, thenDo) {
         var versions = this.versions[versionData.path]
