@@ -25,6 +25,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         options = options || {};
         options.fs = options.fs || process.cwd();
         options.excludedDirectories = options.excludedDirectories || ['.svn', '.git', 'node_modules'];
+        this.resetDatabase = !!options.resetDatabase;
         this.repository = new Repository(options);
     },
 
@@ -34,7 +35,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         var handler = this, repo = handler.repository;
         async.series([
             this.patchServer.bind(this, server),
-            repo.start.bind(repo),
+            repo.start.bind(repo, this.resetDatabase),
             function(next) {
                 server.on('close', repo.close.bind(repo));
                 server.on('close', function() { handler.server = null; });

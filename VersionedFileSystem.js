@@ -48,12 +48,21 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         this.excludedDirectories = options.excludedDirectories || [];
     },
 
-    initializeFromDisk: function(thenDo) {
+    initializeFromDisk: function(resetDb, thenDo) {
         console.log('LivelyFS initialize at %s', this.getRootDirectory());
+        if (!resetDb) {
+            var self = this;
+            self.storage.reset(false, function(err) {
+                if (!err) self.emit('initialized');
+                thenDo(err); 
+            });
+            return;
+        }
+
         var self = this;
         async.waterfall([
-            function(next) { self.storage.reset(next); },
-            this.walkFiles.bind(this, this.excludedDirectories),
+            function(next) { self.storage.reset(true, next); },
+            self.walkFiles.bind(self, self.excludedDirectories),
             function(findResult, next) {
                 console.log('LivelyFS initialize synching %s files', findResult.files.length);
                 async.map(findResult.files, function(fi, next) {

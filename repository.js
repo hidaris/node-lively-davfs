@@ -45,8 +45,9 @@ util._extend(Repository.prototype, d.bindMethods({
         Object.freeze(this);
     },
 
-    start: function(thenDo) {
-        this.fs.initializeFromDisk(thenDo);
+    start: function(resetDatabase, thenDo) {
+        // resetDatabase = drop what was stored previously
+        this.fs.initializeFromDisk(resetDatabase, thenDo);
     },
 
     close: function(thenDo) {
