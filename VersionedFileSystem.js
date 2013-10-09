@@ -11,6 +11,55 @@ var SQLiteStore = require('./sqlite-storage');
 var d = require('./domain');
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// helper
+function batchify(list, constrainedFunc, context) {
+    // takes elements and fits them into subarrays (=batches) so that for
+    // each batch constrainedFunc returns true. Note that contrained func
+    // should at least produce 1-length batches, otherwise an error is raised
+    // see [$world.browseCode("lively.lang.tests.ExtensionTests.ArrayTest", "testBatchify", "lively.lang.tests.ExtensionTests")]
+    // for an example
+    function extractBatch(batch, sizes) {
+        // Array -> Array -> Array[Array,Array]
+        // case 1: no sizes to distribute, we are done
+        if (!sizes.length) return [batch, []];
+        var first = sizes[0], rest = sizes.slice(1);
+        // if batch is empty we have to take at least one
+        // if batch and first still fits, add first
+        var candidate = batch.concat([first]);
+        if (constrainedFunc.call(context, candidate)) return extractBatch(candidate, rest);
+        // otherwise leave first out for now
+        var batchAndSizes = extractBatch(batch, rest);
+        return [batchAndSizes[0], [first].concat(batchAndSizes[1])];
+    }
+    function findBatches(batches, sizes) {
+        if (!sizes.length) return batches;
+        var extracted = extractBatch([], sizes);
+        if (!extracted[0].length)
+            throw new Error('Batchify constrained does not ensure consumption '
+                          + 'of at least one item per batch!');
+        return findBatches(batches.concat([extracted[0]]), extracted[1]);
+    }
+    return findBatches([], list);
+}
+
+function sum(arr) { return arr.reduce(function(sum,ea) { return sum+ea; },0); }
+
+function pluck(arr, property) {
+    var result = new Array(arr.length);
+    for (var i = 0; i < arr.length; i++) {
+        result[i] = arr[i][property]; }
+    return result;
+}
+
+function humanReadableByteSize(n) {
+    function round(n) { return Math.round(n * 100) / 100 }
+    if (n < 1000) return String(round(n)) + 'B'
+    n = n / 1024;
+    if (n < 1000) return String(round(n)) + 'KB'
+    n = n / 1024;
+    return String(round(n)) + 'MB'
+}
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // versioning data structures
 /*
  * maps paths to list of versions
@@ -64,36 +113,47 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             function(next) { self.storage.reset(true, next); },
             self.walkFiles.bind(self, self.excludedDirectories),
             function(findResult, next) {
-                console.log('LivelyFS initialize synching %s files', findResult.files.length);
-                async.map(findResult.files, function(fi, next) {
-                    var bypassContentRead = false;
-                    if (bypassContentRead) {
-                        next(null, {
+                var batchMaxSize = 40, batchMaxFileSize = Math.pow(2, 26)/*64MB*/
+                function sumFileSize(batch) { return sum(pluck(pluck(batch, 'stat'), 'size')); }
+                var fileReadBatches = batchify(findResult.files, function(batch) {
+                    return batch.length == 1
+                        || batch.length < batch.length
+                        || sumFileSize(batch) < batchMaxFileSize; })
+                console.log('LivelyFS initialize synching %s files (%s MB) in %s batches (%s)',
+                    findResult.files.length,
+                    humanReadableByteSize(sumFileSize(findResult.files)),
+                    fileReadBatches.length,
+                    fileReadBatches.map(function(batch) { return humanReadableByteSize(sumFileSize(batch)); }).join(', '));
+                function createRecordForFileInfo(fi, thenDo) {
+                    fs.readFile(path.join(self.rootDirectory, fi.path), function(err, content) {
+                        if (err) { console.log('error reading file %s:', fi.path, err); thenDo(err); return; }
+                        thenDo(err, {
                             change: 'initial',
                             version: 0,
                             author: 'unknown',
                             date: fi.stat ? fi.stat.mtime.toISOString() : '',
-                            content: null,
+                            content: content && content.toString(),
                             path: fi.path,
                             stat: fi.stat
                         });
-                    } else {
-                        fs.readFile(path.join(self.rootDirectory, fi.path), function(err, content) {
-                            next(err, {
-                                change: 'initial',
-                                version: 0,
-                                author: 'unknown',
-                                date: fi.stat ? fi.stat.mtime.toISOString() : '',
-                                content: content && content.toString(),
-                                path: fi.path,
-                                stat: fi.stat
-                            });
-                        });
-                    }
-                }, next);
-            },
-            function(fileRecords, next) {
-                self.addVersions(fileRecords, function(err) { next(err); });
+                    });
+                }
+
+async.forEachSeries(fileReadBatches, function(batch, next) {
+    console.log('Reading %s, files in batch of size %s', batch.length, humanReadableByteSize(sumFileSize(batch)));
+    async.waterfall([
+        async.mapSeries.bind(async, batch, createRecordForFileInfo),
+        function(fileRecords, next) { self.addVersions(fileRecords, next); }
+    ], next);
+}, next);
+                
+//                 async.forEachSeries(fileReadBatches, function(batch, next) {
+// console.log('Reading %s, files in batch of size %s', batch.length, humanReadableByteSize(sumFileSize(batch)));
+//                     async.waterfall([
+//                         async.map.bind(async, batch, createRecordForFileInfo),
+//                         function(fileRecords, next) { self.addVersions(fileRecords, next); }
+//                     ], next);
+//                 }, next);
             },
             function(next) { self.emit('initialized'); next(); }
         ], thenDo);
