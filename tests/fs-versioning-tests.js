@@ -26,9 +26,10 @@ function createDB(dbLocation, thenDo) {
 function fakeDAVChange(relPath, content, author, date) {
     var request = util._extend({}, EventEmitter.prototype);
     EventEmitter.call(request);
-    fakeDAVPlugin.emit('fileChanged', {uri: relPath, req: request});
-    request.emit('data', new Buffer(content));
-    request.emit('end');
+    fakeDAVPlugin.emit('fileChanged', {
+        uri: relPath,
+        req: request,
+        content: {isDone: true, buffer: new Buffer(content)}});
     fs.writeFileSync(path.join(testDirectory, relPath), content);
     fakeDAVPlugin.emit('afterFileChanged', {uri: relPath});
 }
@@ -65,7 +66,7 @@ var versionedFilesystemTests = {
                 EventEmitter.call(fakeDAVPlugin);
                 testRepo = new Repository({fs: testDirectory});
                 testRepo.attachToDAVPlugin(fakeDAVPlugin);
-                testRepo.start(next);
+                testRepo.start(true/*resetDatabase*/, next);
             },
             logProgress('repo setup')
         ], callback);

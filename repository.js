@@ -124,18 +124,16 @@ util._extend(Repository.prototype, d.bindMethods({
             },
             canBeCommitted: function() {
                 var waitForStat = readStat && !this.statRead,
-                    waitForBody = readBody
-                                && !this.record.content
-                                && this.req
-                                && !this.requestDataRead;
+                    waitForBody = readBody && !this.requestDataRead;
                 return !waitForBody && !waitForStat;
             },
             requestDataRead: false,
             statRead: !!evt.stat || false,
-            request: evt.req
+            request: evt.req,
+            incomingContent: evt.content
         }
         this.pendingChangeQueue.push(taskData);
-        readBody && this.startReadingRequestBody(taskData);
+        readBody && this.startReadingRequestContent(taskData);
         if (!readBody && !readStat) this.commitPendingChanges();
     },
 
@@ -156,24 +154,28 @@ util._extend(Repository.prototype, d.bindMethods({
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // change processing
-    startReadingRequestBody: function(change) {
+    startReadingRequestContent: function(change, startTimestamp) {
         var repo = this;
-        if (!change.request) change.requestDataRead = true;
+        if (!change.incomingContent) change.requestDataRead = true;
         if (change.requestDataRead) { this.commitPendingChanges(); return; }
-        console.log("start reading request body for %s", change.record.path);
-        var body = '';
-        change.request.on('error', function(err) {
-            console.error('Error while trying to read dav request:', err);
-            repo.discardPendingChange(change);
-        });
-        change.request.on('data', function(data) {
-            body += data.toString() });
-        change.request.on('end', function() {
-            console.log("request body for %s read", change.record.path);
-            change.record.content = body;
+        var timeout = 1*1000, ts = Date.now();
+        if (!startTimestamp) startTimestamp = ts;
+        if (ts-startTimestamp > timeout) {
+            console.log("reading content for %s timed out", change.record.path);
             change.requestDataRead = true;
-            repo.commitPendingChanges();
-        });
+            this.commitPendingChanges();
+            return
+        }
+        console.log("waiting for content of %s", change.record.path);
+        if (!change.incomingContent.isDone) {
+            setTimeout(this.startReadingRequestContent.bind(
+                this, change, startTimestamp), 100);
+            return;
+        }
+        change.record.content = change.incomingContent.buffer.toString();
+        change.requestDataRead = true;
+        console.log("content for %s read", change.record.path);
+        repo.commitPendingChanges();
     },
 
     readFileStat: function(change) {

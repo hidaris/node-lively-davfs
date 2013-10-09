@@ -72,7 +72,9 @@ var tests = {
             createServer,
             logProgress('server created'),
             function(next) {
-                handler = new livelyDAVHandler({fs: testDirectory});
+                handler = new livelyDAVHandler({
+                    resetDatabase: true,
+                    fs: testDirectory});
                 testRepo = handler.repository;
                 testServer.on('request', function(req, res, next) {
                     handler.handleRequest(req, res, next);
@@ -99,7 +101,7 @@ var tests = {
         });
     },
     testPutCreatesNewVersion: function(test) {
-        test.expect(3);
+        test.expect(4);
         async.series([
             function(next) {
                 put('aFile.txt', 'test');
@@ -110,6 +112,7 @@ var tests = {
                     test.equal(files.length, 1, '# files');
                     test.equal(files[0].path, 'aFile.txt', 'file name');
                     test.equal(files[0].change, 'contentChange', 'no change recorded');
+                    test.equal(files[0].content, 'test', 'no content recorded');
                     next();
                 });
             }
@@ -132,7 +135,7 @@ var tests = {
         ], test.done);
     },
     testDAVCreatedFileIsFound: function(test) {
-        test.expect(4);
+        test.expect(5);
         async.series([
             function(next) { put('writtenFile.txt', 'test'); testRepo.once('synchronized', next); },
             function(next) {
@@ -141,6 +144,7 @@ var tests = {
                     test.equal(files[0].path, 'aFile.txt', 'file name');
                     test.equal(files[1].path, 'writtenFile.txt', 'file name 2');
                     test.equal(files[1].change, 'created', 'file 2 change');
+                    test.equal(files[1].content, 'test', 'no content recorded');
                     next();
                 });
             }

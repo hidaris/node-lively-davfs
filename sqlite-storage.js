@@ -84,7 +84,6 @@ function storeVersionedObjects(db, dataAccessors, thenDo) {
                           data.content, data.path];
             stmt.run.apply(stmt, fields.concat([afterInsert]));
             // db can run stuff in parallel, no need to wait for stmt to finsish
-            // next();
             // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
             function afterInsert(err) {
                 if (err) {
