@@ -44,6 +44,8 @@ function batchify(list, constrainedFunc, context) {
 
 function sum(arr) { return arr.reduce(function(sum,ea) { return sum+ea; },0); }
 
+function sumFileSize(batch) { return sum(pluck(pluck(batch, 'stat'), 'size')); }
+
 function pluck(arr, property) {
     var result = new Array(arr.length);
     for (var i = 0; i < arr.length; i++) {
@@ -59,6 +61,13 @@ function humanReadableByteSize(n) {
     n = n / 1024;
     return String(round(n)) + 'MB'
 }
+
+function isExcluded(excl, pathPart) {
+    if (typeof excl === 'string' && excl === pathPart) return true;
+    if (util.isRegExp(excl) && excl.test(pathPart)) return true;
+    return false;
+}
+
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // versioning data structures
 /*
@@ -75,7 +84,66 @@ function humanReadableByteSize(n) {
  * a change is what kind of operation the version created:
  * ['initial', 'creation', 'deletion', 'contentChange']
  */
- 
+function createVersionRecord(fields, thenDo) {
+    // this is what goes into storage
+    var record = {
+        change: fields.change || 'initial',
+        version: fields.version || 0,
+        author: fields.author || 'unknown',
+        date: fields.date || (fields.stat && fields.stat.mtime.toISOString()) || '',
+        content: fields.content ? fields.content.toString() : null,
+        path: fields.path,
+        stat: fields.stat
+    }
+    thenDo(null, record);
+}
+
+// this is for the import of files from disk:
+function readFileAndCreateInitialVersionRecord(rootDir, fi, thenDo) {
+    fs.readFile(path.join(rootDir, fi.path), handleReadResult);
+    function handleReadResult(err, content) {
+        if (!err) {
+            createVersionRecord({
+                path: fi.path,
+                stat: fi.stat,
+                content: content
+            }, thenDo);
+        } else {
+            console.log('error reading file %s:', fi.path, err);
+            thenDo(err);
+        }
+    }
+}
+
+var batchMaxFileSize = Math.pow(2, 26)/*64MB*/
+function batchConstrained(batch) {
+    // how to backpack large file array to fit operations in mem
+    return batch.length == 1
+        || batch.length < batch.length
+        || sumFileSize(batch) < batchMaxFileSize;
+}
+
+function readFileContentsAndStore(livelyFs, files, next) {
+    // files = [{path: STRING, stat: STAT object}] as returned by walkFiles
+    // 1) split found files into batches that have a limited file
+    //    size (to not exceed the memory)
+    // 2) for each batch: read file contents and submit to storage
+    // 3) when storage done: rinse and repeat
+    var batches = batchify(files, batchConstrained);
+    console.log('read files and store uses %s batches', batches.length);
+    async.forEachSeries(batches, function(batch, next) {
+        console.log('Reading %s, files in batch of size %s',
+                    batch.length, humanReadableByteSize(sumFileSize(batch)));
+        async.waterfall([
+            async.mapSeries.bind(
+                async, batch,
+                readFileAndCreateInitialVersionRecord.bind(null, livelyFs.getRootDirectory())),
+            function(fileRecords, next) { livelyFs.addVersions(fileRecords, next); }
+        ], next);
+    }, next);
+}
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
 function VersionedFileSystem(options) {
     try {
         EventEmitter.call(this);
@@ -109,68 +177,32 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             return;
         }
 
-        var self = this;
+        // 1) Find files in root directory that should be imported
+        // 2) read content for those files
+        // 3) submit into store as new ("initial") version record
+        var self = this,
+            rootDirectory = this.getRootDirectory(),
+            storage = this.storage,
+            walkFiles = self.walkFiles.bind(this, this.excludedDirectories, this.excludedFiles);
         async.waterfall([
-            function(next) { self.storage.reset(true, next); },
-            self.walkFiles.bind(self, self.excludedDirectories, self.excludedFiles),
+            function(next) { storage.reset(true, next); },
+            walkFiles,
             function(findResult, next) {
-                var batchMaxSize = 40, batchMaxFileSize = Math.pow(2, 26)/*64MB*/
-                function sumFileSize(batch) { return sum(pluck(pluck(batch, 'stat'), 'size')); }
-                var fileReadBatches = batchify(findResult.files, function(batch) {
-                    return batch.length == 1
-                        || batch.length < batch.length
-                        || sumFileSize(batch) < batchMaxFileSize; })
                 console.log('LivelyFS initialize synching %s files (%s MB) in %s batches (%s)',
-                    findResult.files.length,
-                    humanReadableByteSize(sumFileSize(findResult.files)),
-                    fileReadBatches.length,
-                    fileReadBatches.map(function(batch) { return humanReadableByteSize(sumFileSize(batch)); }).join(', '));
-                function createRecordForFileInfo(fi, thenDo) {
-                    fs.readFile(path.join(self.rootDirectory, fi.path), function(err, content) {
-                        if (err) { console.log('error reading file %s:', fi.path, err); thenDo(err); return; }
-                        thenDo(err, {
-                            change: 'initial',
-                            version: 0,
-                            author: 'unknown',
-                            date: fi.stat ? fi.stat.mtime.toISOString() : '',
-                            content: content && content.toString(),
-                            path: fi.path,
-                            stat: fi.stat
-                        });
-                    });
-                }
-
-async.forEachSeries(fileReadBatches, function(batch, next) {
-    console.log('Reading %s, files in batch of size %s', batch.length, humanReadableByteSize(sumFileSize(batch)));
-    async.waterfall([
-        async.mapSeries.bind(async, batch, createRecordForFileInfo),
-        function(fileRecords, next) { self.addVersions(fileRecords, next); }
-    ], next);
-}, next);
-                
-//                 async.forEachSeries(fileReadBatches, function(batch, next) {
-// console.log('Reading %s, files in batch of size %s', batch.length, humanReadableByteSize(sumFileSize(batch)));
-//                     async.waterfall([
-//                         async.map.bind(async, batch, createRecordForFileInfo),
-//                         function(fileRecords, next) { self.addVersions(fileRecords, next); }
-//                     ], next);
-//                 }, next);
-            },
+                            findResult.files.length,
+                            humanReadableByteSize(sumFileSize(findResult.files)));
+                next(null, self, findResult.files); },
+            readFileContentsAndStore,
             function(next) { self.emit('initialized'); next(); }
         ], thenDo);
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // versioning
-    _excludeTest: function(excl, pathPart) {
-        if (typeof excl === 'string' && excl === pathPart) return true;
-        if (util.isRegExp(excl) && excl.test(pathPart)) return true;
-        return false;
-    },
     isExcludedDir: function(dirPath) {
         var sep = path.sep, dirParts = dirPath.split(sep);
         for (var i = 0; i < this.excludedDirectories.length; i++) {
-            var testDir = this._excludeTest.bind(null,this.excludedDirectories[i]);
+            var testDir = isExcluded.bind(null,this.excludedDirectories[i]);
             if (testDir(dirPath) || dirParts.some(testDir)) return true;
         }
         return false;
@@ -178,7 +210,7 @@ async.forEachSeries(fileReadBatches, function(batch, next) {
     isExcludedFile: function(filePath) {
         var basename = path.basename(filePath);
         for (var i = 0; i < this.excludedFiles.length; i++)
-            if (this._excludeTest(this.excludedFiles[i], basename)) return true;
+            if (isExcluded(this.excludedFiles[i], basename)) return true;
         return false;
     },
     addVersion: function(versionData, thenDo) {
