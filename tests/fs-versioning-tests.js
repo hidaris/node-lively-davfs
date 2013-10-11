@@ -122,19 +122,25 @@ var versionedFilesystemTests = {
         ], test.done);
     },
     testDiskReadOnlyImportsUnimportedFiles: function(test) {
-        test.expect(1);
+        test.expect(2);
         var date = new Date();
         async.series([
-            function(next) {
-                testRepo.fs.readStateFromFiles(next);
-            },
-
+            function(next) { testRepo.fs.readStateFromFiles(next); },
             function(next) {
                 testRepo.getRecords({paths: ['aFile.txt']}, function(err, versions) {
                     test.equal(versions.length, 1, '# versions');
+                    // iso timestamps in sqlite are really coarse so we wait quite a while...
+                    setTimeout(next, 1000);
+                });
+            },
+            function(next) { fs.writeFile(path.join(testDirectory, 'aFile.txt'), 'xxx', next); },
+            function(next) { testRepo.fs.readStateFromFiles(next); },
+            function(next) {
+                testRepo.getRecords({paths: ['aFile.txt']}, function(err, versions) {
+                    test.equal(versions.length, 2, '# versions');
                     next();
                 });
-            }
+            },
         ], test.done);
     }
 };

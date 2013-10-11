@@ -53,25 +53,33 @@ function createBatches(files, thenDo) {
 
 function filterFilesThatAreInStorage(lvfs, files, thenDo) {
     // files = [{path: STRING, stat: {mtime: DATE, ...}}]
-    var queryLimit = 30, allNewFiles = [], paths = files.map(function(f) { return f.path; });
-    var cargo = async.cargo(function(paths, next) {
-        lvfs.getRecords({paths: paths, newest: true}, function(err, versionRecords) {
+    var queryLimit = 3, allNewFiles = [];
+    var cargo = async.cargo(function(files, next) {
+        var paths = files.map(function(f) { return f.path; });
+        lvfs.getRecords({paths: paths, newest: true, attributes: ['path','date']}, function(err, versionRecords) {
             if (err) {
                 console.error('error in filterFilesThatAreInStorage: ', err);
                 thenDo(err, []); return;
             }
-            var pathsInDB = versionRecords.map(function(rec) { return rec['path']; })
-            var newFiles = files.filter(function(file) {
-                var idx = pathsInDB.indexOf(file.path);
-                return idx === -1 ?
-                    true :
-                    new Date(versionRecords[idx].date) > file.stat.mtime;
-            });
+            var pathsInDB = versionRecords.map(function(rec) { return rec['path']; }),
+                newFiles = files.filter(function(file) {
+                    var idx = pathsInDB.indexOf(file.path);
+                    var dateInDB = idx > -1 && new Date(versionRecords[idx].date),
+                        dateOfFile = file.stat.mtime;
+                    if (idx === -1) {
+                        // console.log('Importing file %s (not in DB).',file.path)
+                    } else if (dateInDB < dateOfFile) {
+                        console.log('Importing newer file %s.',file.path);
+                    }
+                    return idx === -1 ?
+                        true :
+                        dateInDB < dateOfFile;
+                });
             allNewFiles = allNewFiles.concat(newFiles);
             next(null);
         })
     }, queryLimit);
-    cargo.push(paths);
+    cargo.push(files);
     cargo.drain = function() {
         thenDo(null, allNewFiles); };
 }

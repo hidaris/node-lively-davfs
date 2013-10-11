@@ -61,20 +61,17 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
 
     initializeFromDisk: function(resetDb, thenDo) {
         console.log('LivelyFS initialize at %s', this.getRootDirectory());
-        var storage = this.storage,
-            whenDone = function(err, thenDp) {
-                if (err) console.error('Error initializing versioned fs: %s', err);
-                else this.emit('initialized');
-                thenDo(err);
-            }.bind(this);
-        if (!resetDb) { storage.reset(false, whenDone); return; }
-
+        var self = this, storage = this.storage;
         // Find files in root directory that should be imported and commit them
         // as a new version (change = "initial") to the storage
         async.series([
-            storage.reset.bind(storage, true/*drop tables?*/),
+            storage.reset.bind(storage, resetDb/*drop tables?*/),
             this.readStateFromFiles.bind(this),
-        ], whenDone);
+        ], function(err) {
+            if (err) console.error('Error initializing versioned fs: %s', err);
+            else self.emit('initialized');
+            thenDo(err);
+        });
     },
 
     readStateFromFiles: function(thenDo) {

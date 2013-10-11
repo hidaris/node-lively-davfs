@@ -178,8 +178,9 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         var where = 'WHERE';
         where += ' ('
                + (spec.paths ?
-                  spec.paths.map(function(path) { return "objs.path = '" + path + "'"}).join(' OR ') :
-                  "objs.path IS NOT NULL")
+                  spec.paths.map(function(path) {
+                        return "objs.path = '" + path.replace(/\'/g, "''") + "'";
+                   }).join(' OR ') : "objs.path IS NOT NULL")
                + ')';
         function dateString(d) { return d.consructor === Date ? d.toISOString() : d; }
         if (spec.date) {
