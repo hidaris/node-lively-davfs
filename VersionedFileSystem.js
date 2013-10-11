@@ -123,37 +123,13 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // accessing
-    getVersionsFor: function(fn, thenDo) { this.storage.getVersionsFor(fn, thenDo); },
-    getVersionsForPaths: function(paths, options, thenDo) { this.storage.getVersionsForPaths(paths, options, thenDo); },
-    getVersions: function(thenDo) { this.storage.dump(thenDo); },
-    getFiles: function(thenDo) {
-        this.getVersions(function(err, versions) {
-            if (err) { thenDo(err); return; }
-            var existingFiles = versions
-                .map(function(fileVersions) {
-                    return fileVersions[fileVersions.length-1]; })
-                .filter(function(version) {
-                    return version && version.change !== 'deletion'; });
-            thenDo(null, existingFiles);
-        });
-    },
-
+    getVersionsFor: function(fn, thenDo) { this.storage.getRecordsFor(fn, thenDo); },
+    getRecords: function(options, thenDo) { this.storage.getRecords(options, thenDo); },
+    getFiles: function(thenDo) { this.storage.getRecords({newest: true}, thenDo); },
     getFileRecord: function(options, thenDo) {
-        var errMsg;
-        if (!options.path) errMsg = 'No path specified';
-        // if (!errMsg && !options.version) errMsg = 'No version specified';
-        if (errMsg) { thenDo(errMsg); return; }
-        var fs = this;
-        this.getVersionsFor(options.path, function(err, versions) {
-            if (err || !versions) { thenDo(err, null); return; }
-            if (options.version !== undefined) {
-                var records = versions.filter(function(v) {
-                    return String(v.version) === String(options.version); });
-                thenDo(null, records && records[0]);
-            } else {
-                thenDo(err, records[records.length-1]);
-            }
-        });
+        options = util._extend({paths: [options.path], newest: true}, options);
+        this.storage.getRecords(options, function(err, rows) {
+            thenDo(err, rows && rows[0]); }); 
     },
 
     getRootDirectory: function() { return this.rootDirectory; },

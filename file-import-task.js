@@ -55,17 +55,17 @@ function filterFilesThatAreInStorage(lvfs, files, thenDo) {
     // files = [{path: STRING, stat: {mtime: DATE, ...}}]
     var queryLimit = 30, allNewFiles = [], paths = files.map(function(f) { return f.path; });
     var cargo = async.cargo(function(paths, next) {
-        lvfs.getVersionsForPaths(paths, {groupByPaths: true}, function(err, versionRecords) {
+        lvfs.getRecords({paths: paths, newest: true}, function(err, versionRecords) {
             if (err) {
                 console.error('error in filterFilesThatAreInStorage: ', err);
                 thenDo(err, []); return;
             }
+            var pathsInDB = versionRecords.map(function(rec) { return rec['path']; })
             var newFiles = files.filter(function(file) {
-                var records = versionRecords[file.path];
-                if (!records) return true;
-                var newest = records.reduce(function(max, record) {
-                    return record.version > max.version ? record : max });
-                return new Date(newest.date) > file.stat.mtime;
+                var idx = pathsInDB.indexOf(file.path);
+                return idx === -1 ?
+                    true :
+                    new Date(versionRecords[idx].date) > file.stat.mtime;
             });
             allNewFiles = allNewFiles.concat(newFiles);
             next(null);

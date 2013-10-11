@@ -197,11 +197,11 @@ util._extend(Repository.prototype, d.bindMethods({
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // accessors
-    getFiles: function(thenDo) { this.fs.getFiles(thenDo); },
-    getVersionsFor: function(filename, thenDo) { this.fs.getVersionsFor(filename, thenDo); },
-    getVersions: function(thenDo) { this.fs.getVersions(thenDo); },
     getRootDirectory: function() { return this.fs.getRootDirectory(); },
+    getFiles: function(thenDo) { this.fs.getFiles(thenDo); },
     getFileRecord: function(options, thenDo) { return this.fs.getFileRecord(options, thenDo); },
+    getRecords: function(options, thenDo) { return this.fs.getRecords(options, thenDo); },
+    getVersionsFor: function(path, thenDo) { return this.getRecords({paths: [path]}, thenDo); },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // debugging

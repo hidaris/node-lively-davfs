@@ -144,56 +144,75 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         else thenDo(null);
     },
 
-    store: function(versionData, options, thenDo) {
-        this.storeAll([versionData], options, thenDo);
-    },
-
     storeAll: function(versionDataSets, options, thenDo) {
         var accessors = versionDataSets.map(function(dataset) {
             return function(callback) { callback(null, dataset); }; });
         storeVersionedObjects(this.db, accessors, options, thenDo);
     },
 
-    getVersionsFor: function(fn, thenDo) {
-        this.getVersionsForPaths([fn], {groupByPaths: true}, function(err, byPaths) {
-            if (err) thenDo(err, []);
-            else thenDo(null, byPaths[fn] || []);
-        });
+    getRecordsFor: function(path, thenDo) {
+        this.getRecords({paths: [path]}, thenDo);
     },
 
-    getVersionsForPaths: function(paths, options, thenDo) {
-        options = options || {};
-        var attrs = options.attributes || ["path","version","change","author","date","content"],
-            select = util.format("SELECT %s FROM versioned_objects", attrs.join(',')),
-            where = util.format("WHERE ", paths.map(function(path) { return "path = '" + path + "'"}).join(' OR ')),
-            orderBy = "ORDER BY CAST(version as integer);",
-            sql = [select, where, orderBy].join(' '),
-            whenDone = options.groupByPaths ?
-                function(err, rows) {
-                    if (err) { thenDo(err, {}); return; }
-                    thenDo(null, rows.reduce(function(resultByPaths, row) {
-                        var pathRows = resultByPaths[row.path] || (resultByPaths[row.path] = [])
-                        pathRows.push(row);
-                        return resultByPaths;
-                    }, {}));
-                } : thenDo;
+    getRecords: function(spec, thenDo) {
+        // generic query maker for version records. Example: get date and
+        // content of most recent version of most recent version of "foo.txt":
+        // this.getVersions({paths: ["foo.txt"], attributes: ['date','content'], newest: true});
+        // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+        // spec = {
+        //   groupByPaths: BOOL, -- return an object with rows grouped (keys of result)
+        //   attributes: [STRING], -- which attributes to return from stored records
+        //   newest: BOOL, -- only return most recent version of a recored
+        //   paths: [STRING], -- filter records by path names
+        //   version: [STRING|NUMBER], -- the version number
+        //   date: [DATE|STRING], -- last mod date
+        //   newer: [DATE|STRING], -- last mod newer
+        //   older: [DATE|STRING], -- last mod older
+        // }
+        spec = spec || {};
+        // SELECT caluse
+        var attrs = spec.attributes || ["path","version","change","author","date","content"];
+        if (spec.groupByPaths && attrs.indexOf('path') === -1) attrs.push('path');
+        var select = util.format("SELECT %s FROM versioned_objects objs", attrs.join(','));
+        // WHERE clause
+        var where = 'WHERE';
+        where += ' ('
+               + (spec.paths ?
+                  spec.paths.map(function(path) { return "objs.path = '" + path + "'"}).join(' OR ') :
+                  "objs.path IS NOT NULL")
+               + ')';
+        function dateString(d) { return d.consructor === Date ? d.toISOString() : d; }
+        if (spec.date) {
+            where += " AND objs.date = '" + dateString(spec.date) + "'";
+        }
+        if (spec.newer) {
+            where += " AND objs.date > '" + dateString(spec.newer) + "'";
+        }
+        if (spec.older) {
+            where += " AND objs.date < '" + dateString(spec.older) + "'";
+        }
+        if (spec.newest) {
+            where += " AND objs.version = (\n"
+                  + "SELECT max(CAST(version as integer)) AS newestVersion\n"
+                  + "FROM versioned_objects objs2 WHERE objs2.path = objs.path)";
+        } else if (spec.version) {
+            where += " AND objs.version = '" + spec.version + "'";
+        }
+        // ORDER BY
+        var orderBy = "ORDER BY CAST(version as integer);";
+        // altogether
+        var sql = [select, where, orderBy].join(' ');
+        // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+        var whenDone = spec.groupByPaths ?
+            function(err, rows) {
+                if (err) { thenDo(err, {}); return; }
+                thenDo(null, rows.reduce(function(resultByPaths, row) {
+                    var pathRows = resultByPaths[row.path] || (resultByPaths[row.path] = [])
+                    pathRows.push(row);
+                    return resultByPaths;
+                }, {}));
+            } : thenDo;
         query(this.db, sql, [], whenDone);
-    },
-
-    dump: function(thenDo) { // get all versions
-        var sql = "SELECT * FROM versioned_objects GROUP BY path,version;"
-        // query(this.db, sql, [], thenDo);
-        query(this.db, sql, [], function(err, rows) {
-            // console.log(rows);
-            // FIXME!
-            var result = rows.reduce(function(result, row) {
-                var last = result[result.length-1];
-                if (last && last[0].path === row.path) { last.push(row); }
-                else { result.push([row]); }
-                return result;
-            }, []);
-            thenDo(err,result);
-        });
     }
 
 }));

@@ -78,7 +78,7 @@ var versionedFilesystemTests = {
         ], callback);
     },
     testNewVersionOnFileChange: function(test) {
-        test.expect(13);
+        test.expect(15);
         var date = new Date();
         async.series([
             function(next) {
@@ -86,7 +86,7 @@ var versionedFilesystemTests = {
                 testRepo.once('synchronized', next);
             },
             function(next) {
-                testRepo.getVersionsFor('aFile.txt', function(err, versions) {
+                testRepo.getRecords({paths: ['aFile.txt']}, function(err, versions) {
                     test.equal(versions.length, 2, '# versions');
                     test.equal(versions[0].version, '0', 'v1: version');
                     test.equal(versions[1].version, '1', 'v2: version');
@@ -94,8 +94,9 @@ var versionedFilesystemTests = {
                 });
             },
             function(next) {
-                testRepo.getFileRecord({path: 'aFile.txt', version: '0'}, function(err, record) {
-                    test.ok(record, 'no record');
+                testRepo.getRecords({paths: ['aFile.txt'], version: '0'}, function(err, records) {
+                    test.ok(records.length === 1, 'no record');
+                    var record = records[0];
                     test.equal(record.path, 'aFile.txt', 'path');
                     test.equal(record.author, 'unknown', 'author');
                     test.equal(record.content, 'foo bar content', 'content');
@@ -105,7 +106,10 @@ var versionedFilesystemTests = {
                 });
             },
             function(next) {
-                testRepo.getFileRecord({path: 'aFile.txt', version: '1'}, function(err, record) {
+                testRepo.getRecords({paths: ['aFile.txt'], version: '1'}, function(err, records) {
+                    test.ok(records.length === 1, 'no record');
+                    var record = records[0];
+                    test.equal(record.path, 'aFile.txt', 'path');
                     test.ok(record, 'no record v2');
                     test.equal(record.path, 'aFile.txt', 'path v2');
                     test.equal(record.author, 'unknown', 'author v2');
@@ -126,7 +130,7 @@ var versionedFilesystemTests = {
             },
 
             function(next) {
-                testRepo.getVersionsFor('aFile.txt', function(err, versions) {
+                testRepo.getRecords({paths: ['aFile.txt']}, function(err, versions) {
                     test.equal(versions.length, 1, '# versions');
                     next();
                 });
