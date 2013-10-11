@@ -117,61 +117,22 @@ var versionedFilesystemTests = {
             }
         ], test.done);
     },
-    // testA: function(test) {
-        // test.done();
-    //     test.expect(3);
-    //     testRepo.getFiles(function(err, files) {
-    //         test.equal(files.length, 1, '# files');
-    //         test.equal(files[0].path, 'aFile.txt', 'file name');
-    //         test.equal(files[0].change, 'initial', 'no change');
-    //         test.done();
-    //     });
-    // },
-    // testPutCreatesNewVersion: function(test) {
-    //     test.expect(3);
-    //     async.series([
-    //         put.bind(null, 'aFile.txt', 'test'),
-    //         function(next) {
-    //             testRepo.getFiles(function(err, files) {
-    //                 test.equal(files.length, 1, '# files');
-    //                 test.equal(files[0].path, 'aFile.txt', 'file name');
-    //                 test.equal(files[0].change, 'contentChange', 'no change recorded');
-    //                 next();
-    //             });
-    //         }
-    //     ], test.done);
-    // },
-    // testDeleteIsRecorded: function(test) {
-    //     test.expect(5);
-    //     async.series([
-    //         del.bind(null, 'aFile.txt'),
-    //         function(next) {
-    //             testRepo.getVersionsFor('aFile.txt', function(err, versions) {
-    //                 test.equal(versions.length, 2, '# versions');
-    //                 test.equal(versions[0].path, 'aFile.txt', 'v1: path');
-    //                 test.equal(versions[0].change, 'initial', 'v1: change');
-    //                 test.equal(versions[1].path, 'aFile.txt', 'v2: path');
-    //                 test.equal(versions[1].change, 'deletion', 'v2: change');
-    //                 next();
-    //             });
-    //         }
-    //     ], test.done);
-    // },
-    // testDAVCreatedFileIsFound: function(test) {
-    //     test.expect(4);
-    //     async.series([
-    //         put.bind(null, 'writtenFile.txt', 'test'),
-    //         function(next) {
-    //             testRepo.getFiles(function(err, files) {
-    //                 test.equal(files.length, 2, '# files');
-    //                 test.equal(files[0].path, 'aFile.txt', 'file name');
-    //                 test.equal(files[1].path, 'writtenFile.txt', 'file name 2');
-    //                 test.equal(files[1].change, 'created', 'file 2 change');
-    //                 next();
-    //             });
-    //         }
-    //     ], test.done);
-    // },
+    testDiskReadOnlyImportsUnimportedFiles: function(test) {
+        test.expect(1);
+        var date = new Date();
+        async.series([
+            function(next) {
+                testRepo.fs.readStateFromFiles(next);
+            },
+
+            function(next) {
+                testRepo.getVersionsFor('aFile.txt', function(err, versions) {
+                    test.equal(versions.length, 1, '# versions');
+                    next();
+                });
+            }
+        ], test.done);
+    }
 };
 
 module.exports = versionedFilesystemTests;

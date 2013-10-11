@@ -24,10 +24,13 @@ function run(db, stmt, args, thenDo) {
 function query(db, stmt, args, thenDo) {
     var rows = [];
     try {
-        db.all(stmt, args, thenDo);
+        db.all(stmt, args, function(err, rows) {
+            err && log('Query error %s, %s: %s', stmt, args, err);
+            thenDo && thenDo(err, rows);
+        });
     } catch(e) {
         log('Query error %s, %s: %s', stmt, args, e);
-        thenDo(e, []);
+        thenDo && thenDo(e, []);
     }
     // db.each(stmt, args,
     //     function(err, row) {
@@ -70,7 +73,7 @@ function initFSTables(db, thenDo) {
     });
 }
 
-function storeVersionedObjects(db, dataAccessors, thenDo) {
+function storeVersionedObjects(db, dataAccessors, options, thenDo) {
     // this batch-processes worlds inserts
     // worldDataAccessors is an array of functions that expect one parameter, a
     // callback, that in turn has an error callback and an object
@@ -141,21 +144,40 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         else thenDo(null);
     },
 
-    store: function(versionData, thenDo) {
-        this.storeAll([versionData], thenDo);
+    store: function(versionData, options, thenDo) {
+        this.storeAll([versionData], options, thenDo);
     },
 
-    storeAll: function(versionDataSets, thenDo) {
+    storeAll: function(versionDataSets, options, thenDo) {
         var accessors = versionDataSets.map(function(dataset) {
             return function(callback) { callback(null, dataset); }; });
-        storeVersionedObjects(this.db, accessors, thenDo);
+        storeVersionedObjects(this.db, accessors, options, thenDo);
     },
 
     getVersionsFor: function(fn, thenDo) {
-        var sql = "SELECT * FROM versioned_objects "
-                + "WHERE path = ? ";
-                + "ORDER BY CAST(version as integer);";
-        query(this.db, sql, [fn], thenDo);
+        this.getVersionsForPaths([fn], {groupByPaths: true}, function(err, byPaths) {
+            if (err) thenDo(err, []);
+            else thenDo(null, byPaths[fn] || []);
+        });
+    },
+
+    getVersionsForPaths: function(paths, options, thenDo) {
+        options = options || {};
+        var attrs = options.attributes || ["path","version","change","author","date","content"],
+            select = util.format("SELECT %s FROM versioned_objects", attrs.join(',')),
+            where = util.format("WHERE ", paths.map(function(path) { return "path = '" + path + "'"}).join(' OR ')),
+            orderBy = "ORDER BY CAST(version as integer);",
+            sql = [select, where, orderBy].join(' '),
+            whenDone = options.groupByPaths ?
+                function(err, rows) {
+                    if (err) { thenDo(err, {}); return; }
+                    thenDo(null, rows.reduce(function(resultByPaths, row) {
+                        var pathRows = resultByPaths[row.path] || (resultByPaths[row.path] = [])
+                        pathRows.push(row);
+                        return resultByPaths;
+                    }, {}));
+                } : thenDo;
+        query(this.db, sql, [], whenDone);
     },
 
     dump: function(thenDo) { // get all versions

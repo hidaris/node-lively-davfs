@@ -35,7 +35,8 @@ function processFile(lvfs, fi, thenDo) {
 function processBatch(lvfs, batch, thenDo) {
     async.mapSeries(batch,
         function(fileinfo, next) { processFile(lvfs, fileinfo, next); },
-        function(err, fileRecords) { lvfs.addVersions(fileRecords, thenDo); });
+        function(err, fileRecords) {
+            lvfs.addVersions(fileRecords, {onlyImportNew: true}, thenDo); });
 }
 
 function createBatches(files, thenDo) {
@@ -50,6 +51,31 @@ function createBatches(files, thenDo) {
     thenDo(null, batches);
 }
 
+function filterFilesThatAreInStorage(lvfs, files, thenDo) {
+    // files = [{path: STRING, stat: {mtime: DATE, ...}}]
+    var queryLimit = 30, allNewFiles = [], paths = files.map(function(f) { return f.path; });
+    var cargo = async.cargo(function(paths, next) {
+        lvfs.getVersionsForPaths(paths, {groupByPaths: true}, function(err, versionRecords) {
+            if (err) {
+                console.error('error in filterFilesThatAreInStorage: ', err);
+                thenDo(err, []); return;
+            }
+            var newFiles = files.filter(function(file) {
+                var records = versionRecords[file.path];
+                if (!records) return true;
+                var newest = records.reduce(function(max, record) {
+                    return record.version > max.version ? record : max });
+                return new Date(newest.date) > file.stat.mtime;
+            });
+            allNewFiles = allNewFiles.concat(newFiles);
+            next(null);
+        })
+    }, queryLimit);
+    cargo.push(paths);
+    cargo.drain = function() {
+        thenDo(null, allNewFiles); };
+}
+
 function runTask(lvfs, thenDo) {
     // 1) split found files into batches that have a limited file
     //    size (to not exceed the memory)
@@ -62,9 +88,12 @@ function runTask(lvfs, thenDo) {
     async.waterfall([
         function(next) { lvfs.walkFiles(next); },
         function(findResult, next) {
-            var fileCount = findResult.files.length;
-            emitter.emit('filesFound', findResult.files);
-            createBatches(findResult.files, next);
+            filterFilesThatAreInStorage(lvfs, findResult.files, next);
+        },
+        function(files, next) {
+            var fileCount = files.length;
+            emitter.emit('filesFound', files);
+            createBatches(files, next);
         },
         function processBatches(batches, next) {
             // recurse until batches is empty or error occurs

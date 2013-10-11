@@ -61,32 +61,36 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
 
     initializeFromDisk: function(resetDb, thenDo) {
         console.log('LivelyFS initialize at %s', this.getRootDirectory());
-        var self = this;
-        if (!resetDb) {
-            self.storage.reset(false, function(err) {
-                if (!err) self.emit('initialized'); thenDo(err); });
-            return;
-        }
+        var storage = this.storage,
+            whenDone = function(err, thenDp) {
+                if (err) console.error('Error initializing versioned fs: %s', err);
+                else this.emit('initialized');
+                thenDo(err);
+            }.bind(this);
+        if (!resetDb) { storage.reset(false, whenDone); return; }
 
         // Find files in root directory that should be imported and commit them
         // as a new version (change = "initial") to the storage
         async.series([
-            function(next) { self.storage.reset(true, next); },
-            function(next) {
-                var task = importFiles(self);
-                task.on('filesFound', function(files) {
-                    console.log('LivelyFS initialize synching %s files (%s MB)',
-                        files.length,
-                        lvFsUtil.humanReadableByteSize(lvFsUtil.sumFileSize(files)));
-                });
-                task.on('processBatch', function(batch) {
-                    console.log('Reading %s, files in batch of size %s',
-                        batch.length,
-                        lvFsUtil.humanReadableByteSize(lvFsUtil.sumFileSize(batch)));
-                });
-                task.on('end', next);
-            }
-        ], function(err) { self.emit('initialized'); thenDo(err); });
+            storage.reset.bind(storage, true/*drop tables?*/),
+            this.readStateFromFiles.bind(this),
+        ], whenDone);
+    },
+
+    readStateFromFiles: function(thenDo) {
+        // syncs db state with what is stored on disk
+        var task = importFiles(this);
+        task.on('filesFound', function(files) {
+            console.log('LivelyFS synching %s (%s MB) files from disk',
+                files.length,
+                lvFsUtil.humanReadableByteSize(lvFsUtil.sumFileSize(files)));
+        });
+        task.on('processBatch', function(batch) {
+            console.log('Reading %s, files in batch of size %s',
+                batch.length,
+                lvFsUtil.humanReadableByteSize(lvFsUtil.sumFileSize(batch)));
+        });
+        task.on('end', thenDo);
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -105,22 +109,22 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         thenDo(null, record);
     },
 
-    addVersion: function(versionData, thenDo) {
-        // options = {change, version, author, date, content, path}
-        if (this.isExcludedFile(versionData.path)) thenDo(null)
-        else this.storage.store(versionData, thenDo);
+    addVersion: function(versionData, options, thenDo) {
+        this.addVersions([versionData], options, thenDo);
     },
 
-    addVersions: function(versionDatasets, thenDo) {
+    addVersions: function(versionDatasets, options, thenDo) {
+        options = options || {};
         var versionDatasets = versionDatasets.filter(function(record) {
             return !this.isExcludedFile(record.path); }, this);
         if (!versionDatasets.length) thenDo(null);
-        else this.storage.storeAll(versionDatasets, thenDo);
+        else this.storage.storeAll(versionDatasets, options, thenDo);
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // accessing
     getVersionsFor: function(fn, thenDo) { this.storage.getVersionsFor(fn, thenDo); },
+    getVersionsForPaths: function(paths, options, thenDo) { this.storage.getVersionsForPaths(paths, options, thenDo); },
     getVersions: function(thenDo) { this.storage.dump(thenDo); },
     getFiles: function(thenDo) {
         this.getVersions(function(err, versions) {

@@ -82,7 +82,7 @@ util._extend(Repository.prototype, d.bindMethods({
         }
         if (!toCommit.length) return;
         repo.pendingChangeQueue.splice(0, toCommit.length);
-        repo.fs.addVersions(toCommit, function(err, version) {
+        repo.fs.addVersions(toCommit, {}, function(err, version) {
             if (err) {
                 console.error('error in addVersions for records ', toCommit);
             }
