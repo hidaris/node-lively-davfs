@@ -23,7 +23,12 @@ function run(db, stmt, args, thenDo) {
 
 function query(db, stmt, args, thenDo) {
     var rows = [];
-    db.all(stmt, args, thenDo);
+    try {
+        db.all(stmt, args, thenDo);
+    } catch(e) {
+        log('Query error %s, %s: %s', stmt, args, e);
+        thenDo(e, []);
+    }
     // db.each(stmt, args,
     //     function(err, row) {
     //         if (err) log('err: ', err); else rows.push(row);
@@ -89,18 +94,20 @@ function storeVersionedObjects(db, dataAccessors, thenDo) {
                 if (err) {
                     console.error('Error inserting %s: %s', data && data.path, err);
                 } else {
+                    importCount++;
                     console.log("... done storing %s", data.path);
                 }
                 taskCount--;
                 next();
                 if (taskCount > 0) return;
                 stmt.finalize();
-                console.log("all worlds imported!");
+                console.log("stored new versions of %s objects", importCount);
                 thenDo && thenDo();
             }
         });
     }
     var taskCount = dataAccessors.length,
+        importCount = 0,
         parallelReads = 10,
         sqlInsertStmt = 'INSERT INTO versioned_objects '
                       + 'SELECT ?, ifnull(x,0), ?, ?, ?, ? '
