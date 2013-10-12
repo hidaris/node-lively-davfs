@@ -27,6 +27,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         options.excludedDirectories = options.excludedDirectories || ['.svn', '.git', 'node_modules'];
         options.excludedFiles = options.excludedFiles || ['.DS_Store'];
         options.includedFiles = options.includedFiles || undefined/*allow all*/;
+        this.enableVersioning = options.enableVersioning === undefined || options.enableVersioning;
         this.resetDatabase = !!options.resetDatabase;
         this.repository = new Repository(options);
     },
@@ -34,10 +35,16 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
     registerWith: function(app, server, thenDo) {
         if (!server) this.emit('error', new Error('livelydavfs request handler needs server!'));
         this.server = server;
+        var deactivated = !this.enableVersioning;
+        var resetDB = this.resetDatabase;
         var handler = this, repo = handler.repository;
         async.series([
             this.patchServer.bind(this, server),
-            repo.start.bind(repo, this.resetDatabase),
+            function(next) {
+                deactivated && console.log('no versioning...!');
+                if (deactivated) next();
+                else repo.start(resetDB, next);
+            },
             function(next) {
                 server.on('close', repo.close.bind(repo));
                 server.on('close', function() { handler.server = null; });
@@ -58,8 +65,10 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         server.options = {};
         // for showing dir contents
         server.plugins = {
-            livelydav: this.repository.getDAVPlugin(),
             browser: defaultPlugins.browser};
+        if (this.enableVersioning) {
+            server.plugins.livelydav = this.repository.getDAVPlugin();
+        }
         // https server has slightly different interface
         if (!server.baseUri) server.baseUri = '/';
         if (!server.getBaseUri) server.getBaseUri = function() { return this.baseUri };
