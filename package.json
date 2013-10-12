@@ -2,7 +2,11 @@
   "name": "lively-davfs",
   "version": "0.1.1",
   "description": "Manager for versioning and reading / writing resources.",
-  "main": "index.js",
+  "main": "request-handler.js",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:LivelyKernel/livelykernel-scripts.git"
+  },
   "scripts": {
     "test": "node_modules/nodeunit/bin/nodeunit tests/*.js  --reporter minimal"
   },
