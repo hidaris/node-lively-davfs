@@ -9,7 +9,7 @@ var util = require('util');
 var concat = require('concat-stream')
 
 var EventEmitter = require('events').EventEmitter;
-var jsDAVPlugin = require("jsdav/lib/DAV/plugin");
+var jsDAVPlugin = require("jsDAV/lib/DAV/plugin");
 
 var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
     name: "livelydav",

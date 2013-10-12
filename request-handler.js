@@ -7,9 +7,9 @@ var Repository = require('./repository');
 var d = require('./domain');
 var EventEmitter = require("events").EventEmitter;
 
-var DavHandler = require('jsdav/lib/DAV/handler');
-var FsTree = require('jsdav/lib/DAV/backends/fs/tree');
-var defaultPlugins = require("jsdav/lib/DAV/server").DEFAULT_PLUGINS;
+var DavHandler = require('jsDAV/lib/DAV/handler');
+var FsTree = require('jsDAV/lib/DAV/backends/fs/tree');
+var defaultPlugins = require("jsDAV/lib/DAV/server").DEFAULT_PLUGINS;
 
 
 function LivelyFsHandler(options) {
