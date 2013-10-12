@@ -52,8 +52,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
     // initializing
     initialize: function(options) {
         if (!options.fs) this.emit('error', 'VersionedFileSystem needs location!');
-        this.storage = new SQLiteStore();
-        // this.storage = new MemoryStore();
+        this.storage = new SQLiteStore(options);
         this.rootDirectory = options.fs;
         this.excludedDirectories = options.excludedDirectories || [];
         this.excludedFiles = options.excludedFiles || [];
@@ -152,7 +151,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
     walkFiles: function(thenDo) {
         var self = this,
             root = this.rootDirectory,
-            find = findit(this.rootDirectory),
+            find = findit(this.rootDirectory, {followSymlinks: true}),
             result = {files: [], directories: []},
             ended = false;
         find.on('directory', function (dir, stat, stop) {

@@ -125,8 +125,9 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-function SQLiteStore() {
+function SQLiteStore(options) {
     this.db = null;
+    this.dbFile = options.dbFile || ":memory:";
     EventEmitter.call(this);
     // Object.freeze(this);
 }
@@ -136,8 +137,7 @@ util._extend(SQLiteStore.prototype, EventEmitter.prototype);
 util._extend(SQLiteStore.prototype, d.bindMethods({
 
     reset: function(emptyTables, thenDo) {
-        // this.db = new sqlite3.Database(':memory:');
-        this.db = new sqlite3.Database(path.join(process.cwd(), "world-db-expt2.sqlite"));
+        this.db = new sqlite3.Database(this.dbFile);
         initFSTables(this.db, emptyTables, thenDo);
     },
 
