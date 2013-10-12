@@ -168,6 +168,39 @@ var tests = {
                 });
             }
         ], test.done);
+    },
+    testIncludedFilesExcludesUnincluded: function(test) {
+        test.expect(3);
+        testRepo.fs.includedFiles = [/.foobar$/];
+        async.series([
+            function(next) {
+                put('aFile.txt', 'test');
+                testRepo.once('synchronized', next);
+            },
+            function(next) {
+                testRepo.getVersionsFor('aFile.txt', function(err, versions) {
+                    test.equal(versions.length, 1, '# "aFile.txt" not ignored');
+                    next();
+                });
+            },
+            function(next) {
+                put('aFile.foo', 'test');
+                put('aFile.foobar', 'test2');
+                testRepo.once('synchronized', next);
+            },
+            function(next) {
+                testRepo.getVersionsFor('aFile.foo', function(err, versions) {
+                    test.equal(versions.length, 0, '# "aFile.foo" not ignored');
+                    next();
+                });
+            },
+            function(next) {
+                testRepo.getVersionsFor('aFile.foobar', function(err, versions) {
+                    test.equal(versions.length, 1, '# "aFile.foobar" not ignored');
+                    next();
+                });
+            }
+        ], test.done);
     }
 };
 

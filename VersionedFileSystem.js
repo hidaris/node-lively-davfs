@@ -14,9 +14,9 @@ var d = require('./domain');
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // helper
-function isExcluded(excl, pathPart) {
-    if (typeof excl === 'string' && excl === pathPart) return true;
-    if (util.isRegExp(excl) && excl.test(pathPart)) return true;
+function matches(reOrString, pathPart) {
+    if (typeof reOrString === 'string' && reOrString === pathPart) return true;
+    if (util.isRegExp(reOrString) && reOrString.test(pathPart)) return true;
     return false;
 }
 
@@ -54,8 +54,9 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         if (!options.fs) this.emit('error', 'VersionedFileSystem needs location!');
         this.storage = new SQLiteStore(options);
         this.rootDirectory = options.fs;
-        this.excludedDirectories = options.excludedDirectories || [];
-        this.excludedFiles = options.excludedFiles || [];
+        this.excludedDirectories = lvFsUtil.stringOrRegExp(options.excludedDirectories) || [];
+        this.excludedFiles = lvFsUtil.stringOrRegExp(options.excludedFiles) || [];
+        this.includedFiles = lvFsUtil.stringOrRegExp(options.includedFiles) || undefined;
     },
 
     initializeFromDisk: function(resetDb, thenDo) {
@@ -135,7 +136,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
     isExcludedDir: function(dirPath) {
         var sep = path.sep, dirParts = dirPath.split(sep);
         for (var i = 0; i < this.excludedDirectories.length; i++) {
-            var testDir = isExcluded.bind(null,this.excludedDirectories[i]);
+            var testDir = matches.bind(null,this.excludedDirectories[i]);
             if (testDir(dirPath) || dirParts.some(testDir)) return true;
         }
         return false;
@@ -143,8 +144,11 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
 
     isExcludedFile: function(filePath) {
         var basename = path.basename(filePath);
+        if (this.includedFiles)
+            for (var i = 0; i < this.includedFiles.length; i++)
+                if (!matches(this.includedFiles[i], basename)) return true;
         for (var i = 0; i < this.excludedFiles.length; i++)
-            if (isExcluded(this.excludedFiles[i], basename)) return true;
+            if (matches(this.excludedFiles[i], basename)) return true;
         return false;
     },
 

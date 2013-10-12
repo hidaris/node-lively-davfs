@@ -1,5 +1,7 @@
 "use strict"
 
+var util = require("util");
+
 function batchify(list, constrainedFunc, context) {
     // takes elements and fits them into subarrays (=batches) so that for
     // each batch constrainedFunc returns true. Note that contrained func
@@ -53,6 +55,18 @@ function humanReadableByteSize(n) {
     return String(round(n)) + 'MB'
 }
 
+function stringOrRegExp(s) {
+    // allows to encode REs in a string like "/\\.css$/i",
+    if (util.isArray(s)) return s.map(stringOrRegExp);
+    if (typeof s !== 'string') return s;
+    if (s[0] !== '/') return s;
+    var endMatch = s.match(/\/([a-z]?)$/);
+    if (!endMatch) return s;
+    var flags = endMatch[1] || undefined;
+    var reString = s.slice(1,-endMatch[0].length);
+    return new RegExp(reString, flags);
+}
+
 function curry(/*func, args*/) {
     // curry(function(a,b) {return a+b},23)(2)
     var func = arguments[0], args = new Array(arguments.length-1);
@@ -70,5 +84,6 @@ module.exports = {
     pluck: pluck,
     sum: sum,
     sumFileSize: sumFileSize,
+    stringOrRegExp: stringOrRegExp,
     humanReadableByteSize: humanReadableByteSize
 }

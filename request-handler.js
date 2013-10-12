@@ -7,9 +7,9 @@ var Repository = require('./repository');
 var d = require('./domain');
 var EventEmitter = require("events").EventEmitter;
 
-var DavHandler = require('jsDAV/lib/DAV/handler');
-var FsTree = require('jsDAV/lib/DAV/backends/fs/tree');
-var defaultPlugins = require("jsDAV/lib/DAV/server").DEFAULT_PLUGINS;
+var DavHandler = require('jsdav/lib/DAV/handler');
+var FsTree = require('jsdav/lib/DAV/backends/fs/tree');
+var defaultPlugins = require("jsdav/lib/DAV/server").DEFAULT_PLUGINS;
 
 
 function LivelyFsHandler(options) {
@@ -26,6 +26,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         options.fs = options.fs || process.cwd();
         options.excludedDirectories = options.excludedDirectories || ['.svn', '.git', 'node_modules'];
         options.excludedFiles = options.excludedFiles || ['.DS_Store'];
+        options.includedFiles = options.includedFiles || undefined/*allow all*/;
         this.resetDatabase = !!options.resetDatabase;
         this.repository = new Repository(options);
     },
