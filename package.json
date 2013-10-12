@@ -1,6 +1,6 @@
 {
   "name": "lively-davfs",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Manager for versioning and reading / writing resources.",
   "main": "index.js",
   "scripts": {
@@ -11,11 +11,10 @@
     "LivelyWeb",
     "wiki"
   ],
-  "author": "RobertKrahn",
+  "author": "Robert Krahn <robert.krahn@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "nodeunit": "~0.8",
-    "jsDAV": "~0.3.2",
+    "jsDAV": "~0.3",
     "restify": "~2.6",
     "findit": "~1.1",
     "request": "~2.25",
@@ -24,6 +23,7 @@
     "concat-stream": "~1.0"
   },
   "devDependencies": {
+    "nodeunit": "~0.8",
     "lively-fs-helper": "https://github.com/rksm/lively-fs-helper/tarball/master"
   }
 }
