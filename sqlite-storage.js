@@ -56,13 +56,13 @@ function initFSTables(db, reset, thenDo) {
     tasks = tasks.concat([
         lvFsUtil.curry(run, db,
             "CREATE TABLE IF NOT EXISTS versioned_objects ("
-          + " path TEXT,"
-          + " version TEXT NOT NULL DEFAULT '0',"
-          + " change TEXT,"
-          + " author TEXT,"
-          + " date TEXT,"
-          + " content TEXT,"
-          + " PRIMARY KEY(path,version));"),
+          + "  path TEXT,"
+          + "  version INTEGER NOT NULL DEFAULT 0,"
+          + "  change TEXT,"
+          + "  author TEXT,"
+          + "  date DATETIME DEFAULT CURRENT_TIMESTAMP,"
+          + "  content TEXT,"
+          + "  PRIMARY KEY(path,version));"),
         lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS versioned_objects_index ON versioned_objects(path,version);"),
         lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS versioned_objects_date_index ON versioned_objects(date,path);")]);
     async.series(tasks, function(err) {
