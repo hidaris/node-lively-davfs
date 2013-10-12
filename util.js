@@ -53,10 +53,22 @@ function humanReadableByteSize(n) {
     return String(round(n)) + 'MB'
 }
 
+function curry(/*func, args*/) {
+    // curry(function(a,b) {return a+b},23)(2)
+    var func = arguments[0], args = new Array(arguments.length-1);
+    for (var i = 1; i < arguments.length; i++) args[i-1] = arguments[i];
+    return function() {
+        var args2 = new Array(arguments.length);
+        for (var i = 0; i < arguments.length; i++) args2[i] = arguments[i];
+        return func.apply(null, args.concat(args2));
+    }
+}
+
 module.exports = {
+    curry: curry,
     batchify: batchify,
+    pluck: pluck,
     sum: sum,
     sumFileSize: sumFileSize,
-    pluck: pluck,
     humanReadableByteSize: humanReadableByteSize
 }
