@@ -1,6 +1,7 @@
 "use strict"
 
 var util = require("util");
+var lvFsUtil = require("./util");
 var path = require("path");
 var EventEmitter = require("events").EventEmitter;
 var d = require('./domain');
@@ -14,6 +15,7 @@ function log(/*args*/) { console.log.apply(console, arguments); }
 function sqlPrep(db, stmt) { return db.prepare(stmt, function(err) { console.log(err) }); }
 
 function run(db, stmt, args, thenDo) {
+    if (typeof args === 'function') thenDo = args;
     db.run(stmt, args, function(err) {
         if (err) log('err: ', err);
         else log('%s -- lastID: %s, changes: %s', stmt, this.lastID, this.changes);
@@ -22,6 +24,7 @@ function run(db, stmt, args, thenDo) {
 }
 
 function query(db, stmt, args, thenDo) {
+    if (typeof args === 'function') thenDo = args;
     var rows = [];
     try {
         db.all(stmt, args, function(err, rows) {
@@ -32,6 +35,7 @@ function query(db, stmt, args, thenDo) {
         log('Query error %s, %s: %s', stmt, args, e);
         thenDo && thenDo(e, []);
     }
+    // in case we want to stream responses at some point:
     // db.each(stmt, args,
     //     function(err, row) {
     //         if (err) log('err: ', err); else rows.push(row);
@@ -41,33 +45,27 @@ function query(db, stmt, args, thenDo) {
     //     });
 }
 
-function initTable(db, tableName, createStmt) {
-    return function(next) {
-        db.serialize(function() {
-            db.run('DROP TABLE IF EXISTS '+ tableName, function(err) {
-                log('DROP TABLE', tableName, err);
-            });
-            db.run(createStmt, function(err) {
-                err && log('error: ', err);
-                next(err); });
-            });
+function initFSTables(db, reset, thenDo) {
+    var tasks = [];
+    if (reset) {
+        tasks = tasks.concat([
+            lvFsUtil.curry(run, db, 'DROP TABLE IF EXISTS versioned_objects'),
+            lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS versioned_objects_date_index;"),
+            lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS versioned_objects_index;")]);
     }
-}
-
-function initFSTables(db, thenDo) {
-    async.parallel([
-        initTable(db, "versioned_objects",
-            "CREATE TABLE versioned_objects (\n"
-          + "    path TEXT,\n"
-          + "    version TEXT NOT NULL DEFAULT '0',\n"
-          + "    change TEXT,\n"
-          + "    author TEXT,\n"
-          + "    date TEXT,\n"
-          + "    content TEXT,\n"
-          + "    PRIMARY KEY(path,version)\n"
-          + ");\n"
-          + "CREATE INDEX ON versioned_objects(path,version);"),
-    ], function(err) {
+    tasks = tasks.concat([
+        lvFsUtil.curry(run, db,
+            "CREATE TABLE IF NOT EXISTS versioned_objects ("
+          + " path TEXT,"
+          + " version TEXT NOT NULL DEFAULT '0',"
+          + " change TEXT,"
+          + " author TEXT,"
+          + " date TEXT,"
+          + " content TEXT,"
+          + " PRIMARY KEY(path,version));"),
+        lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS versioned_objects_index ON versioned_objects(path,version);"),
+        lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS versioned_objects_date_index ON versioned_objects(date,path);")]);
+    async.series(tasks, function(err) {
         log('DONE: CREATE TABLES', err);
         thenDo && thenDo(err);
     });
@@ -140,8 +138,7 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
     reset: function(emptyTables, thenDo) {
         // this.db = new sqlite3.Database(':memory:');
         this.db = new sqlite3.Database(path.join(process.cwd(), "world-db-expt2.sqlite"));
-        if (emptyTables) initFSTables(this.db, thenDo);
-        else thenDo(null);
+        initFSTables(this.db, emptyTables, thenDo);
     },
 
     storeAll: function(versionDataSets, options, thenDo) {
