@@ -12,6 +12,13 @@ var sqlite3 = require('sqlite3').verbose();
 
 function log(/*args*/) { console.log.apply(console, arguments); }
 
+function dateString(d) {
+    if (d.constructor === Date) return d.toISOString();
+    if (typeof d === "number") return dateString(new Date(d));
+    if (typeof d === "string" && /^[0-9]+$/.test(d)) return dateString(Number(d));
+    return d;
+}
+
 function sqlPrep(db, stmt) { return db.prepare(stmt, function(err) { console.log(err) }); }
 
 function run(db, stmt, args, thenDo) {
@@ -86,7 +93,7 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
             }
             console.log("storing %s...", data.path);
             var fields = [data.path, data.change,
-                          data.author, data.date,
+                          data.author, dateString(data.date),
                           data.content, data.path];
             stmt.run.apply(stmt, fields.concat([afterInsert]));
             // db can run stuff in parallel, no need to wait for stmt to finsish
@@ -179,7 +186,6 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
                         return "objs.path = '" + path.replace(/\'/g, "''") + "'";
                    }).join(' OR ') : "objs.path IS NOT NULL")
                + ')';
-        function dateString(d) { return d.consructor === Date ? d.toISOString() : d; }
         if (spec.date) {
             where += " AND objs.date = '" + dateString(spec.date) + "'";
         }
@@ -187,17 +193,17 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
             where += " AND objs.date > '" + dateString(spec.newer) + "'";
         }
         if (spec.older) {
-            where += " AND objs.date < '" + dateString(spec.older) + "'";
+            where += " AND objs.date <= '" + dateString(spec.older) + "'";
         }
         if (spec.newest) {
             where += " AND objs.version = (\n"
-                  + "SELECT max(CAST(version as integer)) AS newestVersion\n"
+                  + "SELECT max(version) AS newestVersion\n"
                   + "FROM versioned_objects objs2 WHERE objs2.path = objs.path)";
         } else if (spec.version) {
             where += " AND objs.version = '" + spec.version + "'";
         }
         // ORDER BY
-        var orderBy = "ORDER BY CAST(version as integer);";
+        var orderBy = "ORDER BY version DESC";
         // altogether
         var sql = [select, where, orderBy].join(' ');
         // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
