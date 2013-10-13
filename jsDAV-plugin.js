@@ -62,7 +62,9 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
         return e.next();
     },
     afterCreateFile: function(e, uri) {
-        this.emit('afterFileCreated', {uri: uri});
+        var req = this.handler.httpRequest,
+            username = global.lively&& global.lively.userData&& global.lively.userData.getUserName(req);
+        this.emit('afterFileCreated', {uri: uri, username: username, req: req});
         return e.next();
     },
     beforeUnbind: function(e, uri) {

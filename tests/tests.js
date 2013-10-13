@@ -117,9 +117,12 @@ var tests = {
         ], test.done);
     },
     testDeleteIsRecorded: function(test) {
-        test.expect(5);
+        var ts;
+        test.expect(6);
         async.series([
-            function(next) { del('aFile.txt'); testRepo.once('synchronized', next); },
+            function(next) {
+                ts = new Date().toISOString().replace(/[0-9]{3}Z/, '000Z');
+                del('aFile.txt'); testRepo.once('synchronized', next); },
             function(next) {
                 testRepo.getVersionsFor('aFile.txt', function(err, versions) {
                     test.equal(versions.length, 2, '# versions');
@@ -127,6 +130,7 @@ var tests = {
                     test.equal(versions[1].change, 'initial', 'v1: change');
                     test.equal(versions[0].path, 'aFile.txt', 'v2: path');
                     test.equal(versions[0].change, 'deletion', 'v2: change');
+                    test.equal(versions[0].date, ts, 'v2: timestamp');
                     next();
                 });
             }

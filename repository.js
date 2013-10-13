@@ -117,7 +117,10 @@ util._extend(Repository.prototype, d.bindMethods({
                 version: undefined,
                 change: changeType,
                 author: evt.username || 'unknown',
-                date: '',
+                date: evt.stat ? evt.stat.mtime :
+                    (readStat ? '' :
+                        // don't record the ms
+                        new Date().toISOString().replace(/[0-9]{3}Z/, '000Z')),
                 content: evt.req && evt.req.body ? evt.req.body : null,
                 path: evt.uri,
                 stat: evt.stat
