@@ -41,6 +41,11 @@ function del(path, thenDo) {
     request(url, {method: 'DELETE'}, function(err, res) {
         console.log('DELETE done'); thenDo && thenDo(err); });
 }
+function get(path, thenDo) {
+    var url = 'http://localhost:' + port + '/' + (path || '');
+    request(url, {method: 'GET'}, function(err, res, body) {
+        thenDo && thenDo(err, body); });
+}
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // tests
@@ -65,8 +70,9 @@ var tests = {
                     resetDatabase: true,
                     fs: testDirectory,
                     excludedDirectories: [/ignoredDir/],
-                    excludedFiles: [/^ignoredFile[0-9]*/]
-                    });
+                    excludedFiles: [/^ignoredFile[0-9]*/],
+                    timemachine: {path: 'timemachine/'}
+                });
                 testRepo = handler.repository;
                 testServer.on('request', function(req, res, next) {
                     handler.handleRequest(req, res, next);
@@ -169,38 +175,44 @@ var tests = {
             }
         ], test.done);
     },
-    testIncludedFilesExcludesUnincluded: function(test) {
+    testTimeMachineHTTPAccess: function(test) {
         test.expect(3);
-        testRepo.fs.includedFiles = [/.foobar$/];
         async.series([
             function(next) {
-                put('aFile.txt', 'test');
+                testRepo.fs.addVersions([
+                    {path: 'file1.txt', content: 'v1 content', version: 1, date: new Date('2013-10-01 10:55:01 PDT')},
+                    {path: 'file1.txt', content: 'v2 content', version: 2, date: new Date('2013-10-01 10:56:01 PDT')},
+                    {path: 'file1.txt', content: 'v3 content', version: 3, date: new Date('2013-10-12 10:01:01 PDT')},
+                ], {}, next);
+            },
+            function(next) {
+                put('file1.txt', 'v4 content');
                 testRepo.once('synchronized', next);
             },
             function(next) {
-                testRepo.getVersionsFor('aFile.txt', function(err, versions) {
-                    test.equal(versions.length, 1, '# "aFile.txt" not ignored');
+                get('file1.txt', function(err, content) {
+                    test.equal(content, 'v4 content', 'content of simple GET');
+                    next(err);
+                });
+            },
+            function(next) {
+                testRepo.getVersionsFor('file1.txt', function(err, versions) {
+                    test.equal(versions.length, 4, '# version');
                     next();
                 });
             },
             function(next) {
-                put('aFile.foo', 'test');
-                put('aFile.foobar', 'test2');
-                testRepo.once('synchronized', next);
-            },
-            function(next) {
-                testRepo.getVersionsFor('aFile.foo', function(err, versions) {
-                    test.equal(versions.length, 0, '# "aFile.foo" not ignored');
-                    next();
+                get('timemachine/' + encodeURIComponent('2013-10-12 10:01:01 PDT') + '/file1.txt', function(err, content) {
+                    test.equal(content, 'v3 content', 'timemachined GET');
+                    next(err);
                 });
             },
-            function(next) {
-                testRepo.getVersionsFor('aFile.foobar', function(err, versions) {
-                    test.equal(versions.length, 1, '# "aFile.foobar" not ignored');
-                    next();
-                });
-            }
-        ], test.done);
+        ], function(err) {
+            test.done(err);
+            setTimeout(function() {
+                process.exit()
+            },500);
+        });
     }
 };
 
