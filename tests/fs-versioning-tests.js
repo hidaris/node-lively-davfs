@@ -88,14 +88,14 @@ var versionedFilesystemTests = {
             function(next) {
                 testRepo.getRecords({paths: ['aFile.txt']}, function(err, versions) {
                     test.equal(versions.length, 2, '# versions');
-                    test.equal(versions[0].version, '0', 'v1: version');
-                    test.equal(versions[1].version, '1', 'v2: version');
+                    test.equal(versions[1].version, 0, 'v1: version ' + versions[1].version);
+                    test.equal(versions[0].version, 1, 'v2: version');
                     next();
                 });
             },
             function(next) {
-                testRepo.getRecords({paths: ['aFile.txt'], version: '0'}, function(err, records) {
-                    test.ok(records.length === 1, 'no record');
+                testRepo.getRecords({paths: ['aFile.txt'], version: 0}, function(err, records) {
+                    test.ok(records.length === 1, 'no record v0');
                     var record = records[0];
                     test.equal(record.path, 'aFile.txt', 'path');
                     test.equal(record.author, 'unknown', 'author');
@@ -106,7 +106,7 @@ var versionedFilesystemTests = {
                 });
             },
             function(next) {
-                testRepo.getRecords({paths: ['aFile.txt'], version: '1'}, function(err, records) {
+                testRepo.getRecords({paths: ['aFile.txt'], version: 1}, function(err, records) {
                     test.ok(records.length === 1, 'no record');
                     var record = records[0];
                     test.equal(record.path, 'aFile.txt', 'path');

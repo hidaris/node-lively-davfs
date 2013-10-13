@@ -123,10 +123,10 @@ var tests = {
             function(next) {
                 testRepo.getVersionsFor('aFile.txt', function(err, versions) {
                     test.equal(versions.length, 2, '# versions');
-                    test.equal(versions[0].path, 'aFile.txt', 'v1: path');
-                    test.equal(versions[0].change, 'initial', 'v1: change');
-                    test.equal(versions[1].path, 'aFile.txt', 'v2: path');
-                    test.equal(versions[1].change, 'deletion', 'v2: change');
+                    test.equal(versions[1].path, 'aFile.txt', 'v1: path');
+                    test.equal(versions[1].change, 'initial', 'v1: change');
+                    test.equal(versions[0].path, 'aFile.txt', 'v2: path');
+                    test.equal(versions[0].change, 'deletion', 'v2: change');
                     next();
                 });
             }
@@ -207,12 +207,7 @@ var tests = {
                     next(err);
                 });
             },
-        ], function(err) {
-            test.done(err);
-            setTimeout(function() {
-                process.exit()
-            },500);
-        });
+        ], test.done);
     }
 };
 

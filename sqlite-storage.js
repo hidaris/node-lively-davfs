@@ -200,8 +200,8 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
             where += " AND objs.version = (\n"
                   + "SELECT max(version) AS newestVersion\n"
                   + "FROM versioned_objects objs2 WHERE objs2.path = objs.path)";
-        } else if (spec.version) {
-            where += " AND objs.version = '" + spec.version + "'";
+        } else if (spec.version !== undefined) {
+            where += " AND objs.version = " + spec.version;
         }
         // ORDER BY
         var orderBy = "ORDER BY version DESC";
