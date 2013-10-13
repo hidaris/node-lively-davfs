@@ -161,18 +161,18 @@ util._extend(Repository.prototype, d.bindMethods({
         var repo = this;
         if (!change.incomingContent) change.requestDataRead = true;
         if (change.requestDataRead) { this.commitPendingChanges(); return; }
-        var timeout = 1*1000, ts = Date.now();
+        var timeout = 1*7000, ts = Date.now();
         if (!startTimestamp) startTimestamp = ts;
         if (ts-startTimestamp > timeout) {
             console.log("reading content for %s timed out", change.record.path);
             change.requestDataRead = true;
             this.commitPendingChanges();
-            return
+            return;
         }
         console.log("waiting for content of %s", change.record.path);
         if (!change.incomingContent.isDone) {
             setTimeout(this.startReadingRequestContent.bind(
-                this, change, startTimestamp), 100);
+                this, change, startTimestamp), 300);
             return;
         }
         change.record.content = change.incomingContent.buffer.toString();
