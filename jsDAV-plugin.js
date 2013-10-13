@@ -62,13 +62,14 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
         return e.next();
     },
     afterCreateFile: function(e, uri) {
-        var req = this.handler.httpRequest,
-            username = global.lively&& global.lively.userData&& global.lively.userData.getUserName(req);
-        this.emit('afterFileCreated', {uri: uri, username: username, req: req});
+        var req = this.handler.httpRequest;
+        this.emit('afterFileCreated', {uri: uri, req: req});
         return e.next();
     },
     beforeUnbind: function(e, uri) {
-        this.emit('fileDeleted', {uri: uri, req: this.handler.httpRequest});
+        var req = this.handler.httpRequest,
+            username = global.lively&& global.lively.userData&& global.lively.userData.getUserName(req);
+        this.emit('fileDeleted', {uri: uri, req: this.handler.httpRequest, username: username});
         return e.next();
     }
 }, EventEmitter.prototype);
