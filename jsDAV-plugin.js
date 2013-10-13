@@ -36,9 +36,12 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
         return e.next();
     },
     beforeWriteContent: function(e, uri, node) {
+        var req = this.handler.httpRequest,
+            username = global.lively&& global.lively.userData && global.lively.userData.getUserName(req);
         this.emit('fileChanged', {
+            username: username,
             uri: uri,
-            req: this.handler.httpRequest,
+            req: req,
             content: this._putContent});
         this._putContent = null;
         return e.next();
@@ -48,9 +51,12 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
         return e.next();
     },
     beforeCreateFile: function(e, uri, data, encoding, node) {
+        var req = this.handler.httpRequest,
+            username = global.lively&& global.lively.userData&& global.lively.userData.getUserName(req);
         this.emit('fileCreated', {
+            username: username,
             uri: uri,
-            req: this.handler.httpRequest,
+            req: req,
             content: this._putContent});
         this._putContent = null;
         return e.next();

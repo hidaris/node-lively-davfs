@@ -116,7 +116,7 @@ util._extend(Repository.prototype, d.bindMethods({
             record: {
                 version: undefined,
                 change: changeType,
-                author: 'unknown',
+                author: evt.username || 'unknown',
                 date: '',
                 content: evt.req && evt.req.body ? evt.req.body : null,
                 path: evt.uri,
