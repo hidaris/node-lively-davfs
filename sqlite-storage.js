@@ -172,6 +172,7 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         //   date: [DATE|STRING], -- last mod date
         //   newer: [DATE|STRING], -- last mod newer
         //   older: [DATE|STRING], -- last mod older
+        //   limit: [NUMBER]
         // }
         spec = spec || {};
         // SELECT caluse
@@ -204,8 +205,10 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         }
         // ORDER BY
         var orderBy = "ORDER BY version DESC";
+        // limit
+        var limit = typeof spec.limit === 'number' ? 'LIMIT ' + spec.limit : '';
         // altogether
-        var sql = [select, where, orderBy].join(' ');
+        var sql = [select, where, orderBy, limit].join(' ');
         // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
         var whenDone = spec.groupByPaths ?
             function(err, rows) {
