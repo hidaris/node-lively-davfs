@@ -39,9 +39,8 @@ util._extend(Repository.prototype, d.bindMethods({
         // committed async work has to to done, though, which might intermix the
         // change order
         this.pendingChangeQueue = [];
-        this.fs.once('initialized', function() {
-            this.emit('initialized');
-        }.bind(this));
+        this.fs.once('initialized', function() { this.emit('initialized'); }.bind(this));
+        this._commitPendingChangesWatcherTimer = setInterval(this.commitPendingChangesWatcher.bind(this), 1000);
         Object.freeze(this);
     },
 
@@ -51,6 +50,7 @@ util._extend(Repository.prototype, d.bindMethods({
     },
 
     close: function(thenDo) {
+        clearInterval(this._commitPendingChangesWatcherTimer);
         this.emit('closed');
         thenDo && thenDo(null);
     },
@@ -72,6 +72,21 @@ util._extend(Repository.prototype, d.bindMethods({
     // change recording
     isSynchronized: function() { return this.pendingChangeQueue.length === 0; },
 
+    commitPendingChangesWatcher: function() {
+        if (!this.pendingChangeQueue.length) return;
+        var timeToWorry = 60*1000;
+        this.pendingChangeQueue.forEach(function(change) {
+            if (Date.now() - change.startTime < timeToWorry) return;
+            if (!change.statRead) console.log('Change for %s has no file stat', change.record.path);
+            if (!change.requestDataRead) console.log('Change for %s has no content', change.record.path);
+        });
+        var change = this.pendingChangeQueue[0];
+        if (Date.now() - change.startTime > timeToWorry) {
+            console.log('Took too long to process change for %s, discarding it', change.record.path);
+            this.discardPendingChange(change);
+        }
+    },
+
     commitPendingChanges: function() {
         var repo = this,
             q = this.pendingChangeQueue,
@@ -80,6 +95,7 @@ util._extend(Repository.prototype, d.bindMethods({
             if (!q[i].canBeCommitted()) break;
             toCommit.push(q[i].record);
         }
+        console.log("Commiting %s changes to DB", toCommit.length);
         if (!toCommit.length) return;
         repo.pendingChangeQueue.splice(0, toCommit.length);
         repo.fs.addVersions(toCommit, {}, function(err, version) {
@@ -87,7 +103,7 @@ util._extend(Repository.prototype, d.bindMethods({
                 console.error('error in addVersions for records ', toCommit);
             }
             if (!repo.pendingChangeQueue.length) {
-                console.log("all pending changes process");
+                console.log("all pending changes processed");
                 repo.emit('synchronized');
             }
         });
@@ -130,6 +146,7 @@ util._extend(Repository.prototype, d.bindMethods({
                     waitForBody = readBody && !this.requestDataRead;
                 return !waitForBody && !waitForStat;
             },
+            startTime: Date.now(),
             requestDataRead: false,
             statRead: !!evt.stat || false,
             request: evt.req,
@@ -157,13 +174,12 @@ util._extend(Repository.prototype, d.bindMethods({
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // change processing
-    startReadingRequestContent: function(change, startTimestamp) {
+    startReadingRequestContent: function(change) {
         var repo = this;
         if (!change.incomingContent) change.requestDataRead = true;
         if (change.requestDataRead) { this.commitPendingChanges(); return; }
-        var timeout = 1*7000, ts = Date.now();
-        if (!startTimestamp) startTimestamp = ts;
-        if (ts-startTimestamp > timeout) {
+        var timeout = 60*1000, ts = Date.now();
+        if (ts-change.startTime > timeout) {
             console.log("reading content for %s timed out", change.record.path);
             change.requestDataRead = true;
             this.commitPendingChanges();
@@ -172,7 +188,7 @@ util._extend(Repository.prototype, d.bindMethods({
         console.log("waiting for content of %s", change.record.path);
         if (!change.incomingContent.isDone) {
             setTimeout(this.startReadingRequestContent.bind(
-                this, change, startTimestamp), 300);
+                this, change), 500);
             return;
         }
         change.record.content = change.incomingContent.buffer.toString();
@@ -190,7 +206,7 @@ util._extend(Repository.prototype, d.bindMethods({
                 repo.discardPendingChange(change);
                 return;
             }
-            console.log("file stat for %s read", change.record.path);
+            console.log("file stat for %s read", change.record.path, stat);
             change.record.stat = stat;
             change.record.date = stat.mtime.toISOString();
             change.statRead = true;
