@@ -30,6 +30,9 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
                 write = concat(function(data) {
                     content.buffer = data;
                     content.isDone = true });
+            write.on('error', function(err) {
+                console.error("error reading from DAV PUT request: ", err);
+            });
             req.pipe(write);
             this._putContent = content;
         }
