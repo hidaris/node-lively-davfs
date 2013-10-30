@@ -173,6 +173,7 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         //   attributes: [STRING], -- which attributes to return from stored records
         //   newest: BOOL, -- only return most recent version of a recored
         //   paths: [STRING], -- filter records by path names
+        //   pathPatterns: [STRING], -- pattern to match paths
         //   version: [STRING|NUMBER], -- the version number
         //   date: [DATE|STRING], -- last mod date
         //   newer: [DATE|STRING], -- last mod newer
@@ -192,6 +193,11 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
                         return "objs.path = '" + path.replace(/\'/g, "''") + "'";
                    }).join(' OR ') : "objs.path IS NOT NULL")
                + ')';
+        if (spec.pathPatterns) {
+            where += " AND ( " + spec.pathPatterns.map(function(pattern) {
+                return "objs.path LIKE '" + pattern.replace(/\'/g, "''") + "'";
+           }).join(' OR ') + ' )';
+        }
         if (spec.date) {
             where += " AND objs.date = '" + dateString(spec.date) + "'";
         }
