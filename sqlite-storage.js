@@ -19,6 +19,10 @@ function dateString(d) {
     return d;
 }
 
+function ensureDate(row) {
+    if (row && typeof row.date === 'string') row.date = new Date(row.date);
+}
+
 function sqlPrep(db, stmt) { return db.prepare(stmt, function(err) { console.log(err) }); }
 
 function run(db, stmt, args, thenDo) {
@@ -91,7 +95,7 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
                 console.log('Could not access %s: ', data, err);
                 taskCount--; next(); return;
             }
-            console.log("storing %s...", data.path);
+            console.log("storing %s...", data && data.path);
             var fields = [data.path, data.change,
                           data.author, dateString(data.date),
                           data.content, data.path];
@@ -127,6 +131,7 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
             // but when it is there the stmt.run callback also seems the catch the error...
             err && console.error('error in sql %s: %s', sqlInsertStmt, err); }),
         q = async.queue(worker, parallelReads);
+    console.log('inserting %s records into versioned_objects table', taskCount);
     q.push(dataAccessors);
 }
 
