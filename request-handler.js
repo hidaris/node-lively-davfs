@@ -130,7 +130,9 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         }, function(err, records) {
             if (err) { res.status(500).end(String(err)); return; }
             if (!records.length) { res.status(404).end(util.format('Nothing stored for %s at %s', path, ts)); return; }
-            res.end(records[records.length-1].content);
+            res.setHeader('content-type', '*/*;charset=utf8')
+            var content = records[records.length-1].content;
+            res.end(content);
         });
     }
 
