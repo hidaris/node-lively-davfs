@@ -184,6 +184,7 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         // SELECT caluse
         var attrs = spec.attributes || ["path","version","change","author","date","content"];
         if (spec.groupByPaths && attrs.indexOf('path') === -1) attrs.push('path');
+        if (spec.exists && attrs.indexOf('change') === -1) attrs.push('change');
         var select = util.format("SELECT %s FROM versioned_objects objs", attrs.join(','));
         // WHERE clause
         var where = 'WHERE';
@@ -197,6 +198,9 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
             where += " AND ( " + spec.pathPatterns.map(function(pattern) {
                 return "objs.path LIKE '" + pattern.replace(/\'/g, "''") + "'";
            }).join(' OR ') + ' )';
+        }
+        if (spec.exists) {
+            where += " AND change != 'deletion'";
         }
         if (spec.date) {
             where += " AND objs.date = '" + dateString(spec.date) + "'";
@@ -215,7 +219,12 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
             where += " AND objs.version = " + spec.version;
         }
         // ORDER BY
-        var orderBy = "ORDER BY version DESC";
+        var orderBy;
+        if (spec.orderBy) {
+            orderBy = "ORDER BY " + spec.orderBy
+        } else {
+             orderBy = "ORDER BY version DESC";
+        }
         // limit
         var limit = typeof spec.limit === 'number' ? 'LIMIT ' + spec.limit : '';
         // altogether
