@@ -1,6 +1,6 @@
 {
   "name": "lively-davfs",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Manager for versioning and reading / writing resources.",
   "main": "request-handler.js",
   "repository": {
@@ -18,7 +18,7 @@
   "author": "Robert Krahn <robert.krahn@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "jsDAV": "~0.3",
+    "jsDAV": "https://github.com/LivelyKernel/jsDAV/tarball/windows-compat",
     "restify": "~2.6",
     "findit": "~1.1",
     "request": "~2.25",
