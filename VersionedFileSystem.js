@@ -100,7 +100,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             author: fields.author || 'unknown',
             date: fields.date || (fields.stat && fields.stat.mtime.toISOString()) || '',
             content: fields.content ? fields.content.toString() : null,
-            path: fields.path,
+            path: this.normalizePath(fields.path),
             stat: fields.stat
         }
         thenDo(null, record);
@@ -114,14 +114,21 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         options = options || {};
         var versionDatasets = versionDatasets.filter(function(record) {
             return !this.isExcludedFile(record.path); }, this);
-        if (!versionDatasets.length) thenDo(null);
-        else this.storage.storeAll(versionDatasets, options, thenDo);
+        if (!versionDatasets.length) { thenDo(null); return; }
+        versionDatasets.forEach(function(record) {
+            if (record.path) record.path = this.normalizePath(record.path); }, this);
+        this.storage.storeAll(versionDatasets, options, thenDo);
     },
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // accessing
-    getVersionsFor: function(fn, thenDo) { this.storage.getRecordsFor(fn, thenDo); },
-    getRecords: function(options, thenDo) { this.storage.getRecords(options, thenDo); },
+    getVersionsFor: function(fn, thenDo) { this.storage.getRecordsFor(this.normalizePath(fn), thenDo); },
+    getRecords: function(options, thenDo) {
+        if (options.paths) options.paths = options.paths.map(function(fn) {
+            return this.normalizePath(fn); }, this);
+        if (options.pathPatterns) options.pathPatterns = options.pathPatterns.map(function(fn) {
+            return this.normalizePath(fn); }, this);
+        this.storage.getRecords(options, thenDo); },
     getFiles: function(thenDo) { this.storage.getRecords({newest: true}, thenDo); },
     getFileRecord: function(options, thenDo) {
         options = util._extend({paths: [options.path], newest: true}, options);
@@ -130,6 +137,13 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
     },
 
     getRootDirectory: function() { return this.rootDirectory; },
+
+    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+    // os compat
+    normalizePath: (function() {
+        var backslashRe = /\\/g;
+        return function(fn) { return fn.replace(backslashRe, '/'); }
+    })(),
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // filesystem access

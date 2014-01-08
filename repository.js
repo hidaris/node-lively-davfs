@@ -227,7 +227,7 @@ util._extend(Repository.prototype, d.bindMethods({
     logState: function() {
         console.log('log repo state:');
         console.log("versionedFileInfos: ");
-        dir(this.fs, 1);
+        console.dir(this.fs, 1);
     }
 }));
 

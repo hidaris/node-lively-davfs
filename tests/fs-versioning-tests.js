@@ -77,6 +77,7 @@ var versionedFilesystemTests = {
             fsHelper.cleanupTempFiles
         ], callback);
     },
+
     testNewVersionOnFileChange: function(test) {
         test.expect(15);
         var date = new Date();
@@ -121,6 +122,7 @@ var versionedFilesystemTests = {
             }
         ], test.done);
     },
+
     testDiskReadOnlyImportsUnimportedFiles: function(test) {
         test.expect(2);
         var date = new Date();
@@ -142,7 +144,35 @@ var versionedFilesystemTests = {
                 });
             },
         ], test.done);
+    },
+
+    testPathAreNormalizedOnWriteAndRead: function(test) {
+        var path = 'C:\\foo\\bar\\baz';
+        async.series([
+            function(next) {
+                var record = {
+                    version: undefined,
+                    change: 'creation',
+                    author: 'unknown',
+                    date: new Date().toISOString(),
+                    content: 'fooooo',
+                    path: path,
+                }
+                testRepo.fs.addVersions([record], {}, function(err, version) {
+                    test.ifError(err);
+                    next();
+                });
+            },
+            function(next) {
+                testRepo.getRecords({paths: [path]}, function(err, records) {
+                    test.equal(records.length, 1, '# versions');
+                    test.equal(records[0].content, 'fooooo', 'content');
+                    next();
+                });
+            }
+        ], test.done);
     }
+
 };
 
 module.exports = versionedFilesystemTests;
