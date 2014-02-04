@@ -63,17 +63,16 @@ function filterFilesThatAreInStorage(lvfs, files, thenDo) {
             }
             var pathsInDB = versionRecords.map(function(rec) { return rec['path']; }),
                 newFiles = files.filter(function(file) {
-                    var idx = pathsInDB.indexOf(file.path);
-                    var dateInDB = idx > -1 && new Date(versionRecords[idx].date),
+                    var filePath = lvfs.normalizePath(file.path),
+                        idx = pathsInDB.indexOf(filePath),
+                        dateInDB = idx > -1 && new Date(versionRecords[idx].date),
                         dateOfFile = file.stat.mtime;
                     if (idx === -1) {
                         // console.log('Importing file %s (not in DB).',file.path)
                     } else if (dateInDB < dateOfFile) {
                         console.log('Importing newer file %s.',file.path);
                     }
-                    return idx === -1 ?
-                        true :
-                        dateInDB < dateOfFile;
+                    return idx === -1 ? true : dateInDB < dateOfFile;
                 });
             allNewFiles = allNewFiles.concat(newFiles);
             next(null);
