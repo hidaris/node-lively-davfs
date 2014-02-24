@@ -7,12 +7,7 @@ var EventEmitter = require("events").EventEmitter;
 var livelyDAVPlugin = require('./jsDAV-plugin');
 var VersionedFileSystem = require('./VersionedFileSystem');
 var d = require('./domain');
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// debugging
-global.dir = function(obj, depth) {
-    console.log(util.inspect(obj, {depth: depth || 0}));
-}
+var log = require('./util').log;
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // Repo
@@ -30,9 +25,7 @@ util._extend(Repository.prototype, d.bindMethods({
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // intialize-release
     initialize: function(options) {
-        if (global.lively) {
-            lively.repository = this;
-        }
+        if (global.lively) lively.repository = this;
         this.fs = new VersionedFileSystem(options);
         // we keep a queue for changes b/c they should be committed to the
         // versioned file system in their incoming order. Before they can be
@@ -77,12 +70,12 @@ util._extend(Repository.prototype, d.bindMethods({
         var timeToWorry = 60*1000;
         this.pendingChangeQueue.forEach(function(change) {
             if (Date.now() - change.startTime < timeToWorry) return;
-            if (!change.statRead) console.log('Change for %s has no file stat', change.record.path);
-            if (!change.requestDataRead) console.log('Change for %s has no content', change.record.path);
+            if (!change.statRead) console.warn('Change for %s has no file stat', change.record.path);
+            if (!change.requestDataRead) console.warn('Change for %s has no content', change.record.path);
         });
         var change = this.pendingChangeQueue[0];
         if (Date.now() - change.startTime > timeToWorry) {
-            console.log('Took too long to process change for %s, discarding it', change.record.path);
+            console.warn('Took too long to process change for %s, discarding it', change.record.path);
             this.discardPendingChange(change);
         }
     },
@@ -95,7 +88,7 @@ util._extend(Repository.prototype, d.bindMethods({
             if (!q[i].canBeCommitted()) break;
             toCommit.push(q[i].record);
         }
-        console.log("Commiting %s changes to DB", toCommit.length);
+        log("Commiting %s changes to DB", toCommit.length);
         if (!toCommit.length) return;
         repo.pendingChangeQueue.splice(0, toCommit.length);
         repo.fs.addVersions(toCommit, {}, function(err, version) {
@@ -103,7 +96,7 @@ util._extend(Repository.prototype, d.bindMethods({
                 console.error('error in addVersions for records ', toCommit);
             }
             if (!repo.pendingChangeQueue.length) {
-                console.log("all pending changes processed");
+                log("all pending changes processed");
                 repo.emit('synchronized');
             }
         });
@@ -117,7 +110,7 @@ util._extend(Repository.prototype, d.bindMethods({
     },
 
     onAfterWrite: function(evt) {
-        console.log('after write: ', evt.uri);
+        log('after write: ', evt.uri);
         if (!evt.uri) return;
         var q = this.pendingChangeQueue, change;
         for (var i = 0; i < q.length; i++)
@@ -127,7 +120,7 @@ util._extend(Repository.prototype, d.bindMethods({
     },
 
     captureDAVEvt: function(changeType, readBody, readStat, evt) {
-        if (!evt.uri) { console.log('Error recording file change, no path', evt); return; }
+        if (!evt.uri) { console.error('Error recording file change, no path', evt); return; }
         var taskData = {
             record: {
                 version: undefined,
@@ -180,12 +173,12 @@ util._extend(Repository.prototype, d.bindMethods({
         if (change.requestDataRead) { this.commitPendingChanges(); return; }
         var timeout = 60*1000, ts = Date.now();
         if (ts-change.startTime > timeout) {
-            console.log("reading content for %s timed out", change.record.path);
+            console.warn("reading content for %s timed out", change.record.path);
             change.requestDataRead = true;
             this.commitPendingChanges();
             return;
         }
-        console.log("waiting for content of %s", change.record.path);
+        log("waiting for content of %s", change.record.path);
         if (!change.incomingContent.isDone) {
             setTimeout(this.startReadingRequestContent.bind(
                 this, change), 500);
@@ -193,20 +186,20 @@ util._extend(Repository.prototype, d.bindMethods({
         }
         change.record.content = change.incomingContent.buffer.toString();
         change.requestDataRead = true;
-        console.log("content for %s read", change.record.path);
+        log("content for %s read", change.record.path);
         repo.commitPendingChanges();
     },
 
     readFileStat: function(change) {
         var repo = this;
-        console.log("start reading file stat for %s", change.record.path);
+        log("start reading file stat for %s", change.record.path);
         fs.stat(path.join(repo.getRootDirectory(), change.record.path), function(err, stat) {
             if (err || !stat) {
                 console.error('readFileStat: ', err);
                 repo.discardPendingChange(change);
                 return;
             }
-            console.log("file stat for %s read", change.record.path, stat);
+            log("file stat for %s read", change.record.path, stat);
             change.record.stat = stat;
             change.record.date = stat.mtime.toISOString();
             change.statRead = true;

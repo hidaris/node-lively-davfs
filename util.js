@@ -1,5 +1,6 @@
 "use strict"
 
+var debug = false;
 var util = require("util");
 
 function batchify(list, constrainedFunc, context) {
@@ -34,7 +35,7 @@ function batchify(list, constrainedFunc, context) {
 
 function sum(arr) { return arr.reduce(function(sum,ea) { return sum+ea; },0); }
 
-function sumFileSize(objsWithFilestats) { 
+function sumFileSize(objsWithFilestats) {
     /**/
     return sum(pluck(pluck(objsWithFilestats, 'stat'), 'size'));
 }
@@ -78,6 +79,10 @@ function curry(/*func, args*/) {
     }
 }
 
+function log(/*args*/) {
+    if (debug) console.log.apply(console, arguments);
+}
+
 module.exports = {
     curry: curry,
     batchify: batchify,
@@ -85,5 +90,6 @@ module.exports = {
     sum: sum,
     sumFileSize: sumFileSize,
     stringOrRegExp: stringOrRegExp,
-    humanReadableByteSize: humanReadableByteSize
+    humanReadableByteSize: humanReadableByteSize,
+    log: log
 }

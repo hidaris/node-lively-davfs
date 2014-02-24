@@ -14,7 +14,7 @@ var d = require('./domain');
  * as a new version.
  *
  */
- 
+
 function processFile(lvfs, fi, thenDo) {
     var rootDir = lvfs.getRootDirectory();
     fs.readFile(path.join(rootDir, fi.path), handleReadResult);
@@ -26,7 +26,7 @@ function processFile(lvfs, fi, thenDo) {
                 content: content
             }, thenDo);
         } else {
-            console.log('error reading file %s:', fi.path, err);
+            console.error('error reading file %s:', fi.path, err);
             thenDo(err);
         }
     }
