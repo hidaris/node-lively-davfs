@@ -32,5 +32,13 @@
   "devDependencies": {
     "nodeunit": "~0.8",
     "lively-fs-helper": "https://github.com/rksm/lively-fs-helper/tarball/master"
-  }
+  },
+  "readme": "# lively-davfs\n",
+  "readmeFilename": "README.md",
+  "bugs": {
+    "url": "https://github.com/LivelyKernel/livelykernel-scripts/issues"
+  },
+  "homepage": "https://github.com/LivelyKernel/livelykernel-scripts",
+  "_id": "lively-davfs@0.1.6",
+  "_from": "lively-davfs@>=0.1.5"
 }
