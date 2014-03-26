@@ -5,7 +5,7 @@
   "main": "request-handler.js",
   "repository": {
     "type": "git",
-    "url": "git@github.com:LivelyKernel/livelykernel-scripts.git"
+    "url": "git@github.com:LivelyKernel/node-lively-davfs.git"
   },
   "scripts": {
     "test": "node_modules/nodeunit/bin/nodeunit tests/*.js  --reporter minimal"
@@ -36,9 +36,9 @@
   "readme": "# lively-davfs\n",
   "readmeFilename": "README.md",
   "bugs": {
-    "url": "https://github.com/LivelyKernel/livelykernel-scripts/issues"
+    "url": "https://github.com/LivelyKernel/node-lively-davfs/issues"
   },
-  "homepage": "https://github.com/LivelyKernel/livelykernel-scripts",
+  "homepage": "https://github.com/LivelyKernel/node-lively-davfs",
   "_id": "lively-davfs@0.1.6",
   "_from": "lively-davfs@>=0.1.5"
 }
