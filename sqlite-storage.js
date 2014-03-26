@@ -76,7 +76,9 @@ function initFSTables(db, reset, thenDo) {
           + "  author TEXT,"
           + "  date DATETIME DEFAULT CURRENT_TIMESTAMP,"
           + "  content TEXT,"
+          + "  rewritten TEXT,"
           + "  PRIMARY KEY(path,version));"),
+        // lvFsUtil.curry(run, db, "ALTER TABLE versioned_objects ADD COLUMN rewritten TEXT;"), // FIXME: only do this once!
         lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS versioned_objects_index ON versioned_objects(path,version);"),
         lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS versioned_objects_date_index ON versioned_objects(date,path);")]);
     async.series(tasks, function(err) {
@@ -101,7 +103,8 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
             console.log("storing %s...", data && data.path);
             var fields = [data.path, data.change,
                           data.author, dateString(data.date),
-                          data.content, data.path];
+                          data.content, data.rewritten,
+                          data.path];
             stmt.run.apply(stmt, fields.concat([afterInsert]));
             // db can run stuff in parallel, no need to wait for stmt to finsish
             // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -125,7 +128,7 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
         importCount = 0,
         parallelReads = 10,
         sqlInsertStmt = 'INSERT INTO versioned_objects '
-                      + 'SELECT ?, ifnull(x,0), ?, ?, ?, ? '
+                      + 'SELECT ?, ifnull(x,0), ?, ?, ?, ?, ? '
                       + 'FROM (SELECT max(CAST(objs2.version as integer)) + 1 AS x '
                       + '      FROM versioned_objects objs2 '
                       + '      WHERE objs2.path = ?);',

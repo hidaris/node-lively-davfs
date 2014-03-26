@@ -2,6 +2,8 @@
 
 var async = require("async");
 var util = require("util");
+var Url = require("url");
+var Path = require("path");
 
 var Repository = require('./repository');
 var d = require('./domain');
@@ -27,7 +29,8 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         options.excludedDirectories = options.excludedDirectories || ['.svn', '.git', 'node_modules'];
         options.excludedFiles = options.excludedFiles || ['.DS_Store'];
         options.includedFiles = options.includedFiles || undefined/*allow all*/;
-        this.enableVersioning = options.enableVersioning === undefined || options.enableVersioning;
+        this.enableVersioning = options.enableVersioning === undefined || !!options.enableVersioning; // default: true
+        this.enableRewriting = this.enableVersioning && !!options.enableRewriting; // default: false
         this.resetDatabase = !!options.resetDatabase;
         this.repository = new Repository(options);
         this.timemachineSettings = (function tmSetup(tmOptions) {
@@ -87,6 +90,9 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
     handleRequest: function(req, res, next) {
         if (this.isTimemachineRequest(req)) {
             this.handleTimemachineRequest(req, res, next);
+        } else if (this.isRewrittenCodeRequest(req)) {
+            // FIXME: temporary divert files named DBG_*.js
+            this.handleRewrittenCodeRequest(req, res, next);
         } else {
             new DavHandler(this.server, req, res);
         }
@@ -99,10 +105,12 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         var tmPath = this.timemachineSettings.path;
         return req.url.indexOf(tmPath) === 0;
     },
+
     makeDateAndTime: function(versionString) {
         versionString = decodeURIComponent(versionString);
         return new Date(versionString);
     },
+
     handleTimemachineRequest: function(req, res, next) {
         // req.url is something like '/timemachine/2010-08-07%2015%3A33%3A22/foo/bar.js'
         // tmPath = '/timemachine/'
@@ -132,6 +140,68 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
             if (!records.length) { res.status(404).end(util.format('Nothing stored for %s at %s', path, ts)); return; }
             res.setHeader('content-type', '*/*;charset=utf8')
             var content = records[records.length-1].content;
+            res.end(content);
+        });
+    },
+
+    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+    // rewritten code support
+    isRewrittenCodeRequest: function(req) {
+        if (!this.enableRewriting) return false;
+        var filename = Path.basename(Url.parse(req.url).pathname);
+        return !!filename.match(/^DBG_(.*)\.[Jj][Ss]$/);
+    },
+
+    handleRewrittenCodeRequest: function(req, res, next) {
+        if (req.method.toLowerCase() !== 'get') {
+            res.status(400).end('rewritten code request to ' + req.url + ' not supported.');
+            return;
+        }
+        var lvfs = this.repository.fs,
+            repo = this.repository;
+        var path = Url.parse(req.url).pathname;
+        var filename = Path.basename(path).match(/^DBG_(.*\.[Jj][Ss])$/)[1];
+        path = Path.join(Path.dirname(path), filename).substr(1);
+        console.log('%sing rewritten code for %s', req.method, path);
+        this.repository.getRecords({
+            paths: [path],
+            attributes: ['version', 'date', 'author', 'rewritten'],
+            limit: 1
+        }, function(err, records) {
+            function handleReadResult(err, content) {
+                if (!err) {
+                    res.status(200).end(content);
+                    content = content.toString();
+                    var record = {
+                        change: 'rewrite',
+                        version: undefined,
+                        author: 'unknown',
+                        date: new Date().toISOString().replace(/[0-9]{3}Z/, '000Z'),
+                        content: content,
+                        path: path,
+                        stat: fs.statSync(Path.join(lvfs.rootDirectory, path))
+                    };
+                    repo.pendingChangeQueue.push({
+                        record: record,
+                        canBeCommitted: function() { return true; },
+                        startTime: Date.now()
+                    });
+                    repo.commitPendingChanges();
+                } else {
+                    console.error('error reading file %s:', content, err);
+                    res.status(404).end(util.format('Nothing rewritten stored for %s', path));
+                }
+            }
+
+            if (err) { res.status(500).end(String(err)); return; }
+            if (!records.length) {
+                console.log('Nothing rewritten stored for %s', path);
+                // try to read the file from the filesystem, rewrite it, put it in the db and ship it
+                fs.readFile(Path.join(lvfs.rootDirectory, path), handleReadResult);
+                return;
+            }
+            res.setHeader('content-type', '*/*;charset=utf8')
+            var content = records[records.length-1].rewritten;
             res.end(content);
         });
     }

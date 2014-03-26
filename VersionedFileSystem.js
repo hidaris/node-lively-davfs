@@ -11,6 +11,8 @@ var importFiles = require('./file-import-task');
 var lvFsUtil = require('./util');
 var d = require('./domain');
 
+var lkLoader = require('node-lively-loader');
+
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // helper
 function matches(reOrString, pathPart) {
@@ -53,9 +55,14 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         if (!options.fs) this.emit('error', 'VersionedFileSystem needs location!');
         this.storage = new SQLiteStore(options);
         this.rootDirectory = options.fs;
+        this.enableRewriting = !!options.enableRewriting;
         this.excludedDirectories = lvFsUtil.stringOrRegExp(options.excludedDirectories) || [];
         this.excludedFiles = lvFsUtil.stringOrRegExp(options.excludedFiles) || [];
         this.includedFiles = lvFsUtil.stringOrRegExp(options.includedFiles) || undefined;
+
+        lkLoader.start({ rootPath: this.rootDirectory + '/' }, function() {
+            lively.module('lively.ast.Rewriting').load();
+        });
     },
 
     initializeFromDisk: function(resetDb, thenDo) {
@@ -99,6 +106,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             author: fields.author || 'unknown',
             date: fields.date || (fields.stat && fields.stat.mtime.toISOString()) || '',
             content: fields.content ? fields.content.toString() : null,
+            rewritten: fields.rewritten ? fields.rewritten.toString() : null,
             path: this.normalizePath(fields.path),
             stat: fields.stat
         }
@@ -115,7 +123,41 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             return !this.isExcludedFile(record.path); }, this);
         if (!versionDatasets.length) { thenDo(null); return; }
         versionDatasets.forEach(function(record) {
-            if (record.path) record.path = this.normalizePath(record.path); }, this);
+            function declarationForGlobals(rewrittenAst) {
+                // _0 has all global variables
+                var globalProps = rewrittenAst.body[0].block.body[0].declarations[4].init.properties;
+                return globalProps.map(function(prop) {
+                    var varName = prop.key.value;
+                    return Strings.format('Global["%s"] = _0["%s"];', varName, varName);
+                }).join('\n');
+            }
+
+            if (record.path)
+                record.path = this.normalizePath(record.path);
+
+            var ext = path.extname(record.path).toLowerCase();
+            var rewriteExclude = [
+                "core/lively/bootstrap.js",
+                "core/lively/ast/Rewriting.js",
+                "core/lively/ast/StackReification.js",
+                "core/lively/ast/BootstrapDebugger.js"
+            ];
+            if (ext == '.js') {
+                if ((rewriteExclude.indexOf(record.path) >= 0) || (record.path.substr(0, 9) == 'core/lib/') ||
+                    (path.basename(record.path).substr(0, 4) == 'DBG_')) {
+                    console.log('Skipping ' + record.path + ' from rewriting...');
+                    return;
+                }
+                try {
+                    var ast = lively.ast.acorn.parse(record.content);
+                    var rewrittenAst = lively.ast.Rewriting.rewrite(ast);
+                    var rewrittenCode = escodegen.generate(rewrittenAst);
+                    record.rewritten = '(function() {\n' + rewrittenCode + '\n' + declarationForGlobals(rewrittenAst) + '\n})();';
+                } catch (e) {
+                    console.error('Could not rewrite ' + record.path + ' (' + e.message + ')!')
+                }
+            }
+        }, this);
         this.storage.storeAll(versionDatasets, options, thenDo);
     },
 
