@@ -26,7 +26,10 @@ function ensureDate(row) {
 function sqlPrep(db, stmt) { return db.prepare(stmt, function(err) { console.log(err) }); }
 
 function run(db, stmt, args, thenDo) {
-    if (typeof args === 'function') thenDo = args;
+    if (typeof args === 'function') {
+        thenDo = args;
+        args = undefined;
+    }
     db.run(stmt, args, function(err) {
         if (err) log('err: ', err);
         else log('%s -- lastID: %s, changes: %s', stmt, this.lastID, this.changes);
