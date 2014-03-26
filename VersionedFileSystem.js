@@ -6,7 +6,6 @@ var async = require("async");
 var path = require("path");
 var fs = require("fs");
 var findit = require('findit');
-var MemoryStore = require('./memory-storage');
 var SQLiteStore = require('./sqlite-storage');
 var importFiles = require('./file-import-task');
 var lvFsUtil = require('./util');
