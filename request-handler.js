@@ -165,7 +165,8 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         console.log('%sing rewritten code for %s', req.method, path);
         this.repository.getRecords({
             paths: [path],
-            attributes: ['version', 'date', 'author', 'rewritten'],
+            attributes: ['version', 'date', 'author', 'content'],
+            rewritten: true,
             limit: 1
         }, function(err, records) {
             function handleReadResult(err, content) {
@@ -201,7 +202,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
                 return;
             }
             res.setHeader('content-type', '*/*;charset=utf8')
-            var content = records[records.length-1].rewritten;
+            var content = records[records.length-1].content;
             res.end(content);
         });
     }

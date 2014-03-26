@@ -60,9 +60,15 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         this.excludedFiles = lvFsUtil.stringOrRegExp(options.excludedFiles) || [];
         this.includedFiles = lvFsUtil.stringOrRegExp(options.includedFiles) || undefined;
 
-        lkLoader.start({ rootPath: this.rootDirectory + '/' }, function() {
-            lively.module('lively.ast.Rewriting').load();
-        });
+        if (this.enableRewriting) {
+            var self = this;
+            lkLoader.start({ rootPath: this.rootDirectory + '/' }, function() {
+                lively.require('lively.ast.Rewriting').toRun(function() {
+                    // TODO: load registry from database
+                    self.astRegistry = lively.ast.Rewriting.setCurrentASTRegistry([]);
+                });
+            });
+        }
     },
 
     initializeFromDisk: function(resetDb, thenDo) {
@@ -149,10 +155,14 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                     return;
                 }
                 try {
+                    var astId = this.astRegistry.length;
                     var ast = lively.ast.acorn.parse(record.content);
-                    var rewrittenAst = lively.ast.Rewriting.rewrite(ast);
+                    var rewrittenAst = lively.ast.Rewriting.rewrite(ast, this.astRegistry);
                     var rewrittenCode = escodegen.generate(rewrittenAst);
                     record.rewritten = '(function() {\n' + rewrittenCode + '\n' + declarationForGlobals(rewrittenAst) + '\n})();';
+                    record.maxId = this.astRegistry.length - 1;
+                    record.ast = JSON.stringify(this.astRegistry[astId]);
+                    // TODO: generate source map
                 } catch (e) {
                     console.error('Could not rewrite ' + record.path + ' (' + e.message + ')!')
                 }

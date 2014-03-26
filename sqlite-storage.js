@@ -65,7 +65,10 @@ function initFSTables(db, reset, thenDo) {
         tasks = tasks.concat([
             lvFsUtil.curry(run, db, 'DROP TABLE IF EXISTS versioned_objects'),
             lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS versioned_objects_date_index;"),
-            lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS versioned_objects_index;")]);
+            lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS versioned_objects_index;"),
+            lvFsUtil.curry(run, db, 'DROP TABLE IF EXISTS rewritten_objects'),
+            lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS rewritten_objects_lastId_index;"),
+            lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS rewritten_objects_index;")]);
     }
     tasks = tasks.concat([
         lvFsUtil.curry(run, db,
@@ -76,11 +79,20 @@ function initFSTables(db, reset, thenDo) {
           + "  author TEXT,"
           + "  date DATETIME DEFAULT CURRENT_TIMESTAMP,"
           + "  content TEXT,"
-          + "  rewritten TEXT,"
           + "  PRIMARY KEY(path,version));"),
-        // lvFsUtil.curry(run, db, "ALTER TABLE versioned_objects ADD COLUMN rewritten TEXT;"), // FIXME: only do this once!
         lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS versioned_objects_index ON versioned_objects(path,version);"),
-        lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS versioned_objects_date_index ON versioned_objects(date,path);")]);
+        lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS versioned_objects_date_index ON versioned_objects(date,path);"),
+        lvFsUtil.curry(run, db,
+            "CREATE TABLE IF NOT EXISTS rewritten_objects ("
+          + "  path TEXT,"
+          + "  version INTEGER NOT NULL,"
+          + "  rewrite TEXT,"
+          + "  ast TEXT,"
+          + "  sourcemap TEXT,"
+          + "  lastId INTEGER,"
+          + "  PRIMARY KEY(path,version));"),
+        lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS rewritten_objects_index ON rewritten_objects(path,version);"),
+        lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS rewritten_objects_lastId_index ON rewritten_objects(lastId);")]);
     async.series(tasks, function(err) {
         log('DONE: CREATE TABLES', err);
         thenDo && thenDo(err);
@@ -101,13 +113,23 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
                 taskCount--; next(); return;
             }
             console.log("storing %s...", data && data.path);
-            var fields = [data.path, data.change,
-                          data.author, dateString(data.date),
-                          data.content, data.rewritten,
-                          data.path];
-            stmt.run.apply(stmt, fields.concat([afterInsert]));
-            // db can run stuff in parallel, no need to wait for stmt to finsish
+            versionStmt.run(
+                data.path, data.change, data.author, dateString(data.date), data.content, data.path,
+                /* callback */ afterVersioning
+            );
+            // db can run stuff in parallel, no need to wait for versionStmt to finsish
             // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+            function afterVersioning(err) {
+                if (err || !data.rewritten) {
+                    afterInsert.bind(this)(err);
+                    return;
+                }
+                console.log('storing rewrite for %s...', data.path);
+                rewriteStmt.run(
+                    data.path, data.rewritten, data.ast, null, data.maxId, data.path,
+                    /* callback */ afterInsert
+                );
+            }
             function afterInsert(err) {
                 if (err) {
                     console.error('Error inserting %s: %s', data && data.path, err);
@@ -118,7 +140,7 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
                 taskCount--;
                 next();
                 if (taskCount > 0) return;
-                stmt.finalize();
+                versionStmt.finalize();
                 console.log("stored new versions of %s objects", importCount);
                 thenDo && thenDo();
             }
@@ -127,15 +149,24 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
     var taskCount = dataAccessors.length,
         importCount = 0,
         parallelReads = 10,
-        sqlInsertStmt = 'INSERT INTO versioned_objects '
-                      + 'SELECT ?, ifnull(x,0), ?, ?, ?, ?, ? '
-                      + 'FROM (SELECT max(CAST(objs2.version as integer)) + 1 AS x '
-                      + '      FROM versioned_objects objs2 '
-                      + '      WHERE objs2.path = ?);',
-        stmt = db.prepare(sqlInsertStmt, function(err) {
+        sqlVersionStmt = 'INSERT INTO versioned_objects '
+                       + 'SELECT ?, ifnull(x,0), ?, ?, ?, ? '
+                       + 'FROM (SELECT max(CAST(objs2.version as integer)) + 1 AS x '
+                       + '      FROM versioned_objects objs2 '
+                       + '      WHERE objs2.path = ?);',
+        versionStmt = db.prepare(sqlVersionStmt, function(err) {
             // this callback is needed, when it is not defined the server crashes
-            // but when it is there the stmt.run callback also seems the catch the error...
-            err && console.error('error in sql %s: %s', sqlInsertStmt, err); }),
+            // but when it is there the versionStmt.run callback also seems the catch the error...
+            err && console.error('error in sql %s: %s', sqlVersionStmt, err); }),
+        sqlRewriteStmt = 'INSERT INTO rewritten_objects '
+                       + 'SELECT ?, x, ?, ?, ?, ? '
+                       + 'FROM (SELECT max(CAST(objs.version as integer)) AS x '
+                       + '      FROM versioned_objects objs '
+                       + '      WHERE objs.path = ?);',
+        rewriteStmt = db.prepare(sqlRewriteStmt, function(err) {
+            // this callback is needed, when it is not defined the server crashes
+            // but when it is there the sqlRewriteStmt.run callback also seems the catch the error...
+            err && console.error('error in sql %s: %s', sqlRewriteStmt, err); }),
         q = async.queue(worker, parallelReads);
     console.log('inserting %s records into versioned_objects table', taskCount);
     q.push(dataAccessors);
@@ -177,7 +208,7 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         // spec = {
         //   groupByPaths: BOOL, -- return an object with rows grouped (keys of result)
         //   attributes: [STRING], -- which attributes to return from stored records
-        //   newest: BOOL, -- only return most recent version of a recored
+        //   newest: BOOL, -- only return most recent version of a record
         //   paths: [STRING], -- filter records by path names
         //   pathPatterns: [STRING], -- pattern to match paths
         //   version: [STRING|NUMBER], -- the version number
@@ -185,13 +216,22 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         //   newer: [DATE|STRING], -- last mod newer
         //   older: [DATE|STRING], -- last mod older
         //   limit: [NUMBER]
+        //   rewritten: BOOL, -- return rewritten version as content
         // }
         spec = spec || {};
         // SELECT caluse
         var attrs = spec.attributes || ["path","version","change","author","date","content"];
+        attrs = attrs.map(function(attr) {
+            if (spec.rewritten && attr == 'content')
+                return 'reObjs.rewrite AS content';
+            else
+                return 'objs.' + attr;
+        });
         if (spec.groupByPaths && attrs.indexOf('path') === -1) attrs.push('path');
         if (spec.exists && attrs.indexOf('change') === -1) attrs.push('change');
         var select = util.format("SELECT %s FROM versioned_objects objs", attrs.join(','));
+        // JOIN clause
+        var join = !spec.rewritten ? '' : 'LEFT JOIN rewritten_objects reObjs USING (path, version)';
         // WHERE clause
         var where = 'WHERE';
         where += ' ('
@@ -234,7 +274,7 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         // limit
         var limit = typeof spec.limit === 'number' ? 'LIMIT ' + spec.limit : '';
         // altogether
-        var sql = [select, where, orderBy, limit].join(' ');
+        var sql = [select, join, where, orderBy, limit].join(' ');
         // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
         var whenDone = spec.groupByPaths ?
             function(err, rows) {
