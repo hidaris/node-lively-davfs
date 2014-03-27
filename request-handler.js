@@ -149,12 +149,16 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
     isRewrittenCodeRequest: function(req) {
         if (!this.enableRewriting) return false;
         var filename = Path.basename(Url.parse(req.url).pathname);
-        return !!filename.match(/^DBG_(.*)\.[Jj][Ss]$/);
+        return !!filename.match(/^DBG_(.*)\.[Jj][Ss]$/) || (req.url == '/core/lively/ast/BootstrapDebugger.js');
     },
 
     handleRewrittenCodeRequest: function(req, res, next) {
         if (req.method.toLowerCase() !== 'get') {
             res.status(400).end('rewritten code request to ' + req.url + ' not supported.');
+            return;
+        }
+        if (req.url == '/core/lively/ast/BootstrapDebugger.js') {
+            this.handleRewrittenCodeMapRequest(req, res, next);
             return;
         }
         var lvfs = this.repository.fs,
@@ -204,6 +208,33 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
             res.setHeader('content-type', '*/*;charset=utf8')
             var content = records[records.length-1].content;
             res.end(content);
+        });
+    },
+
+    handleRewrittenCodeMapRequest: function(req, res, next) {
+        var files = [
+            // TODO: Determine necessary modules for world load,
+            //       the rest of the AST registry can be lazily be loaded from the server later
+            'core/lively/Base.js',
+            'core/lively/JSON.js'
+        ];
+        this.repository.getRecords({
+            paths: files,
+            attributes: ['ast', 'lastId'],
+            rewritten: true,
+            newest: true
+        }, function(err, records) {
+            var code = [
+                lively.ast.Rewriting.findNodeByAstIndexBaseDef,
+                lively.ast.Rewriting.createClosureBaseDef,
+                lively.ast.Rewriting.UnwindExceptionBaseDef,
+                "window.LivelyDebuggingASTRegistry=[];"
+            ];
+            records.each(function(record) {
+                code.push('window.LivelyDebuggingASTRegistry[' + record.lastId + ']=' + record.ast + ';')
+            });
+            res.setHeader('content-type', '*/*;charset=utf8')
+            res.end(code.join('\n'));
         });
     }
 

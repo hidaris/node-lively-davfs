@@ -220,10 +220,13 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         // }
         spec = spec || {};
         // SELECT caluse
-        var attrs = spec.attributes || ["path","version","change","author","date","content"];
+        var defaultAttrs = ["path","version","change","author","date","content"];
+        var attrs = spec.attributes || defaultAttrs;
         attrs = attrs.map(function(attr) {
             if (spec.rewritten && attr == 'content')
                 return 'reObjs.rewrite AS content';
+            else if (spec.rewritten && (defaultAttrs.indexOf(attr) == -1))
+                return 'reObjs.' + attr;
             else
                 return 'objs.' + attr;
         });
