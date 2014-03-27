@@ -199,7 +199,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
             }
 
             if (err) { res.status(500).end(String(err)); return; }
-            if (!records.length) {
+            if (!records.length || (records[records.length - 1].content == null)) {
                 console.log('Nothing rewritten stored for %s', path);
                 // try to read the file from the filesystem, rewrite it, put it in the db and ship it
                 fs.readFile(Path.join(lvfs.rootDirectory, path), handleReadResult);
