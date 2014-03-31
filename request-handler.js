@@ -205,7 +205,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
                 fs.readFile(Path.join(lvfs.rootDirectory, path), handleReadResult);
                 return;
             }
-            res.setHeader('content-type', '*/*;charset=utf8')
+            res.setHeader('content-type', 'application/javascript;charset=utf8')
             var content = records[0].content;
             res.end(content);
         });
@@ -328,7 +328,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
                     code.push('window.LivelyDebuggingASTRegistry[' + (record.registry_id + idx + 1) + ']=' + JSON.stringify(entry) + ';');
                 });
             });
-            res.setHeader('content-type', '*/*;charset=utf8')
+            res.setHeader('content-type', 'application/javascript;charset=utf8')
             res.end(code.join('\n'));
         });
     }
