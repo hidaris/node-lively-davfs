@@ -160,7 +160,8 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                     var rewrittenAst = lively.ast.Rewriting.rewrite(ast, this.astRegistry);
                     var rewrittenCode = escodegen.generate(rewrittenAst);
                     record.rewritten = '(function() {\n' + rewrittenCode + '\n' + declarationForGlobals(rewrittenAst) + '\n})();';
-                    record.maxId = this.astRegistry.length - 1;
+                    record.registryId = astId;
+                    record.registryAdditions = JSON.stringify(this.astRegistry.slice(astId + 1));
                     record.ast = JSON.stringify(this.astRegistry[astId]);
                     // TODO: generate source map
                 } catch (e) {

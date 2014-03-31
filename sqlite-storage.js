@@ -67,7 +67,7 @@ function initFSTables(db, reset, thenDo) {
             lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS versioned_objects_date_index;"),
             lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS versioned_objects_index;"),
             lvFsUtil.curry(run, db, 'DROP TABLE IF EXISTS rewritten_objects'),
-            lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS rewritten_objects_lastId_index;"),
+            lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS rewritten_objects_registry_id_index;"),
             lvFsUtil.curry(run, db, "DROP INDEX IF EXISTS rewritten_objects_index;")]);
     }
     tasks = tasks.concat([
@@ -89,10 +89,11 @@ function initFSTables(db, reset, thenDo) {
           + "  rewrite TEXT,"
           + "  ast TEXT,"
           + "  sourcemap TEXT,"
-          + "  lastId INTEGER,"
+          + "  registry_id INTEGER NOT NULL,"
+          + "  registry_additions TEXT,"
           + "  PRIMARY KEY(path,version));"),
         lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS rewritten_objects_index ON rewritten_objects(path,version);"),
-        lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS rewritten_objects_lastId_index ON rewritten_objects(lastId);")]);
+        lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS rewritten_objects_registry_id_index ON rewritten_objects(registry_id);")]);
     async.series(tasks, function(err) {
         log('DONE: CREATE TABLES', err);
         thenDo && thenDo(err);
@@ -126,7 +127,7 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
                 }
                 console.log('storing rewrite for %s...', data.path);
                 rewriteStmt.run(
-                    data.path, data.rewritten, data.ast, null, data.maxId, data.path,
+                    data.path, data.rewritten, data.ast, null, data.registryId, data.registryAdditions, data.path,
                     /* callback */ afterInsert
                 );
             }
@@ -159,7 +160,7 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
             // but when it is there the versionStmt.run callback also seems the catch the error...
             err && console.error('error in sql %s: %s', sqlVersionStmt, err); }),
         sqlRewriteStmt = 'INSERT INTO rewritten_objects '
-                       + 'SELECT ?, x, ?, ?, ?, ? '
+                       + 'SELECT ?, x, ?, ?, ?, ?, ? '
                        + 'FROM (SELECT max(CAST(objs.version as integer)) AS x '
                        + '      FROM versioned_objects objs '
                        + '      WHERE objs.path = ?);',
@@ -215,8 +216,8 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         //   date: [DATE|STRING], -- last mod date
         //   newer: [DATE|STRING], -- last mod newer
         //   older: [DATE|STRING], -- last mod older
-        //   limit: [NUMBER]
-        //   rewritten: BOOL, -- return rewritten version as content
+        //   limit: [NUMBER],
+        //   rewritten: BOOL -- return rewritten version as content
         // }
         spec = spec || {};
         // SELECT caluse

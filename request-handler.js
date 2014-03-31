@@ -212,15 +212,106 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
     },
 
     handleRewrittenCodeMapRequest: function(req, res, next) {
+        // TODO: Determine necessary modules for world load,
+        //       the rest of the AST registry can be lazily be loaded from the server later
         var files = [
-            // TODO: Determine necessary modules for world load,
-            //       the rest of the AST registry can be lazily be loaded from the server later
+            // 'core/lib/lively-libs-debug.js',
+            'core/lively/Migration.js',
+            'core/lively/JSON.js',
+            'core/lively/lang/Object.js',
+            'core/lively/lang/Function.js',
+            'core/lively/lang/String.js',
+            'core/lively/lang/Array.js',
+            'core/lively/lang/Number.js',
+            'core/lively/lang/Date.js',
+            'core/lively/lang/Worker.js',
+            'core/lively/lang/LocalStorage.js',
+            'core/lively/defaultconfig.js',
             'core/lively/Base.js',
-            'core/lively/JSON.js'
+            'core/lively/ModuleSystem.js',
+            'core/lively/Traits.js',
+            'core/lively/DOMAbstraction.js',
+            'core/lively/IPad.js',
+            'core/lively/LogHelper.js',
+            'core/lively/lang/Closure.js',
+            'core/lively/lang/UUID.js',
+            //
+            'core/lively/bindings/Core.js',
+            'core/lively/persistence/Serializer.js',
+            'core/lively/Main.js',
+            'core/lively/net/WebSockets.js',
+            'core/cop/Layers.js',
+            'core/lively/OldModel.js',
+            'core/lively/Data.js',
+            'core/lively/Network.js',
+            'core/lively/data/FileUpload.js',
+            'core/lively/data/VideoUpload.js',
+            'core/lively/data/AudioUpload.js',
+            'core/lively/data/ImageUpload.js',
+            'core/lively/data/PDFUpload.js',
+            'core/lively/data/TextUpload.js',
+            'core/lively/data/ODFImport.js',
+            'core/lively/morphic/Graphics.js',
+            'core/lively/morphic/Shapes.js',
+            'core/lively/morphic/Core.js',
+            'core/lively/morphic/TextCore.js',
+            'core/lively/morphic/Events.js',
+            'core/lively/morphic/Lists.js',
+            'core/lively/morphic/Rendering.js',
+            'core/lively/morphic/PathShapes.js',
+            'core/lively/PartsBin.js',
+            'core/lively/morphic/StyleSheetRepresentation.js',
+            'core/lively/morphic/Canvas.js',
+            'core/lively/morphic/Grid.js',
+            'core/lively/morphic/SVG.js',
+            'core/lively/morphic/Widgets.js',
+            'core/lively/morphic/MorphAddons.js',
+            'core/lively/morphic/HTML.js',
+            'core/lively/morphic/Layout.js',
+            'core/lively/morphic/StyleSheetsHTML.js',
+            'core/lively/bindings/GeometryBindings.js',
+            'core/lively/morphic/Serialization.js',
+            'core/lively/morphic/ObjectMigration.js',
+            'core/lively/morphic/StyleSheets.js',
+            'core/lively/morphic/Halos.js',
+            'core/lively/morphic/AdditionalMorphs.js',
+            'core/lively/persistence/BuildSpec.js',
+            'core/lively/ChangeSets.js',
+            'core/lively/persistence/BuildSpecMorphExtensions.js',
+            'core/lively/morphic/Connectors.js',
+            'core/lively/ide/codeeditor/DocumentChange.js',
+            'core/lively/ide/codeeditor/EvalMarker.js',
+            'core/lively/ide/codeeditor/Keyboard.js',
+            'core/lively/ide/codeeditor/DocumentChange.js',
+            'core/lively/morphic/ScriptingSupport.js',
+            'core/lively/ide/codeeditor/Snippets.js',
+            'core/lively/ide/FileParsing.js',
+            'core/lively/ide/codeeditor/Modes.js',
+            'core/lively/morphic/EventExperiments.js',
+            'core/lively/net/SessionTracker.js',
+            'core/lively/ide/VersionTools.js',
+            'core/lively/ide/CommandLineInterface.js',
+            'core/lively/store/Interface.js',
+            'core/lively/Helper.js',
+            'core/lively/ide/SourceDatabase.js',
+            'core/lively/ast/acorn.js',
+            'core/lively/ide/codeeditor/JS.js',
+            'core/lively/ide/CodeEditor.js',
+            'core/lively/ide/BrowserFramework.js',
+            'core/lively/ide/codeeditor/Completions.js',
+            'core/lively/ide/SyntaxHighlighting.js',
+            'core/lively/ide/SystemBrowserNodes.js',
+            'core/lively/ide/BrowserCommands.js',
+            'core/lively/ide/SystemCodeBrowser.js',
+            'core/lively/ide/ErrorViewer.js',
+            'core/lively/net/tools/Lively2Lively.js',
+            'core/lively/net/tools/Wiki.js',
+            'core/lively/ide/WindowNavigation.js',
+            'core/lively/ide/tools/CommandLine.js'
         ];
         this.repository.getRecords({
             paths: files,
-            attributes: ['ast', 'lastId'],
+            attributes: ['ast', 'registry_id', 'registry_additions'],
             rewritten: true,
             newest: true
         }, function(err, records) {
@@ -231,7 +322,11 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
                 "window.LivelyDebuggingASTRegistry=[];"
             ];
             records.each(function(record) {
-                code.push('window.LivelyDebuggingASTRegistry[' + record.lastId + ']=' + record.ast + ';')
+                code.push('window.LivelyDebuggingASTRegistry[' + record.registry_id + ']=' + record.ast + ';')
+                var moreRegistry = JSON.parse(record.registry_additions);
+                moreRegistry.each(function(entry, idx) {
+                    code.push('window.LivelyDebuggingASTRegistry[' + (record.registry_id + idx + 1) + ']=' + JSON.stringify(entry) + ';');
+                });
             });
             res.setHeader('content-type', '*/*;charset=utf8')
             res.end(code.join('\n'));
