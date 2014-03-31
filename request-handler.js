@@ -149,7 +149,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
     isRewrittenCodeRequest: function(req) {
         if (!this.enableRewriting) return false;
         var filename = Path.basename(Url.parse(req.url).pathname);
-        return !!filename.match(/^DBG_(.*)\.[Jj][Ss]$/) || (req.url == '/core/lively/ast/BootstrapDebugger.js');
+        return !!filename.match(/^DBG_(.*)\.[Jj][Ss][Mm]?$/) || (req.url == '/core/lively/ast/BootstrapDebugger.js');
     },
 
     handleRewrittenCodeRequest: function(req, res, next) {
@@ -161,6 +161,10 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
             this.handleRewrittenCodeMapRequest(req, res, next);
             return;
         }
+        if (Path.extname(req.url).toLowerCase() == '.jsm') {
+            this.handleRewrittenSourceMapRequest(req, res, next);
+            return;
+        }
         var lvfs = this.repository.fs,
             repo = this.repository;
         var path = Url.parse(req.url).pathname;
@@ -169,7 +173,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         console.log('%sing rewritten code for %s', req.method, path);
         this.repository.getRecords({
             paths: [path],
-            attributes: ['version', 'date', 'author', 'content'],
+            attributes: ['version', 'date', 'author', 'content', 'sourcemap'],
             rewritten: true,
             newest: true
         }, function(err, records) {
@@ -207,6 +211,8 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
             }
             res.setHeader('content-type', 'application/javascript;charset=utf8')
             var content = records[0].content;
+            if (records[0].sourcemap != null)
+                content += '\n\n//# sourceMappingURL=DBG_' + filename + 'm';
             res.end(content);
         });
     },
@@ -330,6 +336,27 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
             });
             res.setHeader('content-type', 'application/javascript;charset=utf8')
             res.end(code.join('\n'));
+        });
+    },
+
+    handleRewrittenSourceMapRequest: function(req, res, next) {
+        var path = Url.parse(req.url).pathname;
+        var filename = Path.basename(path).match(/^DBG_(.*\.[Jj][Ss])[Mm]$/)[1];
+        path = Path.join(Path.dirname(path), filename).substr(1);
+        console.log('%sing source map for %s', req.method, path);
+        this.repository.getRecords({
+            paths: [path],
+            attributes: ['sourcemap'],
+            rewritten: true,
+            newest: true
+        }, function(err, records) {
+            if (err) { res.status(500).end(String(err)); return; }
+            if (!records.length || (records[0].sourcemap == null)) {
+                res.status(400).end();
+                return;
+            }
+            res.setHeader('content-type', 'application/json;charset=utf8')
+            res.end(records[0].sourcemap);
         });
     }
 

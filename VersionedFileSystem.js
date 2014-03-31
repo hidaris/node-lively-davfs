@@ -10,6 +10,7 @@ var SQLiteStore = require('./sqlite-storage');
 var importFiles = require('./file-import-task');
 var lvFsUtil = require('./util');
 var d = require('./domain');
+var sourcemap = require("source-map");
 
 var lkLoader = require('node-lively-loader');
 
@@ -137,6 +138,24 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                     return Strings.format('Global["%s"] = _0["%s"];', varName, varName);
                 }).join('\n');
             }
+            function mapForASTs(origAst, rewrittenAst, origFile, optFilename) {
+                var generator = new sourcemap.SourceMapGenerator({ file: optFilename });
+                if (isNaN(origAst.astIndex))
+                    throw new Error('Source Mapping is done by AST indices but astIndex is missing!');
+                var idx, maxIdx = origAst.astIndex;
+                for (idx = 0; idx <= maxIdx; idx++) {
+                    var origNode = acorn.walk.findNodeByAstIndex(origAst, idx, false);
+                    var rewrittenNode = acorn.walk.findNodeByAstIndex(rewrittenAst, idx, false);
+                    if (origNode == null || rewrittenNode == null)
+                        throw new Error('Could not find AST index ' + idx + ' in given ASTs!');
+                    generator.addMapping({
+                        original: { line: origNode.loc.start.line, column: origNode.loc.start.column },
+                        generated: { line: rewrittenNode.loc.start.line, column: rewrittenNode.loc.start.column },
+                        source: origFile
+                    });
+                }
+                return generator.toString();
+            }
 
             if (record.path)
                 record.path = this.normalizePath(record.path);
@@ -156,7 +175,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                 }
                 try {
                     var astId = this.astRegistry.length;
-                    var ast = lively.ast.acorn.parse(record.content);
+                    var ast = lively.ast.acorn.parse(record.content, { locations: true });
                     var rewrittenAst = lively.ast.Rewriting.rewrite(ast, this.astRegistry);
                     var rewrittenCode = escodegen.generate(rewrittenAst);
                     record.rewritten = '(function() {\n' + rewrittenCode + '\n' + declarationForGlobals(rewrittenAst) + '\n})();';
@@ -164,8 +183,11 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                     record.registryAdditions = JSON.stringify(this.astRegistry.slice(astId + 1));
                     record.ast = JSON.stringify(this.astRegistry[astId]);
                     // TODO: generate source map
+                    lively.ast.acorn.rematchAstWithSource(rewrittenAst.body[0], record.rewritten, true, 'body.0.expression.callee.body.body.0');
+                    // TODO: make lively.ast.SourceMap.Generator.mapForASTs work?!
+                    record.sourceMap = mapForASTs(ast, rewrittenAst, path.basename(record.path));
                 } catch (e) {
-                    console.error('Could not rewrite ' + record.path + ' (' + e.message + ')!')
+                    console.error('Could not rewrite ' + record.path + ' (' + e.message + ')!');
                 }
             }
         }, this);

@@ -127,7 +127,7 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
                 }
                 console.log('storing rewrite for %s...', data.path);
                 rewriteStmt.run(
-                    data.path, data.rewritten, data.ast, null, data.registryId, data.registryAdditions, data.path,
+                    data.path, data.rewritten, data.ast, data.sourceMap, data.registryId, data.registryAdditions, data.path,
                     /* callback */ afterInsert
                 );
             }
