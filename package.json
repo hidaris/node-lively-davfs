@@ -1,6 +1,6 @@
 {
   "name": "lively-davfs",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Manager for versioning and reading / writing resources.",
   "main": "request-handler.js",
   "repository": {
