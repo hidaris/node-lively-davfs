@@ -1,6 +1,6 @@
 {
   "name": "lively-davfs",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "description": "Manager for versioning and reading / writing resources.",
   "main": "request-handler.js",
   "repository": {
@@ -29,18 +29,10 @@
     "sqlite3": "~2.1",
     "concat-stream": "~1.0",
     "source-map": ">=0.1.31",
-    "node-lively-loader": ">=0.1.0"
+    "lively-loader": ">=0.1.0"
   },
   "devDependencies": {
     "nodeunit": "~0.8",
     "lively-fs-helper": "https://github.com/rksm/lively-fs-helper/tarball/master"
-  },
-  "readme": "# lively-davfs\n",
-  "readmeFilename": "README.md",
-  "bugs": {
-    "url": "https://github.com/LivelyKernel/node-lively-davfs/issues"
-  },
-  "homepage": "https://github.com/LivelyKernel/node-lively-davfs",
-  "_id": "lively-davfs@0.1.6",
-  "_from": "lively-davfs@>=0.1.5"
+  }
 }

@@ -12,7 +12,7 @@ var lvFsUtil = require('./util');
 var d = require('./domain');
 var sourcemap = require("source-map");
 
-var lkLoader = require('node-lively-loader');
+var lkLoader = require('lively-loader');
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // helper
