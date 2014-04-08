@@ -28,7 +28,8 @@
     "async": "~0.2",
     "sqlite3": "~2.1",
     "concat-stream": "~1.0",
-    "source-map": ">=0.1.31"
+    "source-map": ">=0.1.31",
+    "node-lively-loader": ">=0.1.0"
   },
   "devDependencies": {
     "nodeunit": "~0.8",
