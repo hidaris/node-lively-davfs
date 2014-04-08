@@ -187,7 +187,6 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                         else
                             return value;
                     }).replace(/\{"regexp":("\/.*?\/[gimy]*")\}/g, 'eval($1)');
-                    // TODO: generate source map
                     lively.ast.acorn.rematchAstWithSource(rewrittenAst.body[0], record.rewritten, true, 'body.0.expression.callee.body.body.0');
                     // TODO: make lively.ast.SourceMap.Generator.mapForASTs work?!
                     record.sourceMap = mapForASTs(ast, rewrittenAst, path.basename(record.path));
