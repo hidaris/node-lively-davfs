@@ -91,6 +91,7 @@ function initFSTables(db, reset, thenDo) {
           + "  sourcemap TEXT,"
           + "  registry_id INTEGER NOT NULL,"
           + "  registry_additions TEXT,"
+          + "  additions_count INTEGER NOT NULL,"
           + "  PRIMARY KEY(path,version));"),
         lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS rewritten_objects_index ON rewritten_objects(path,version);"),
         lvFsUtil.curry(run, db, "CREATE INDEX IF NOT EXISTS rewritten_objects_registry_id_index ON rewritten_objects(registry_id);")]);
@@ -127,7 +128,8 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
                 }
                 console.log('storing rewrite for %s...', data.path);
                 rewriteStmt.run(
-                    data.path, data.rewritten, data.ast, data.sourceMap, data.registryId, data.registryAdditions, data.path,
+                    data.path, data.rewritten, data.ast, data.sourceMap, data.registryId, data.registryAdditions,
+                    data.additionsCount || 0, data.path,
                     /* callback */ afterInsert
                 );
             }
@@ -160,7 +162,7 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
             // but when it is there the versionStmt.run callback also seems the catch the error...
             err && console.error('error in sql %s: %s', sqlVersionStmt, err); }),
         sqlRewriteStmt = 'INSERT INTO rewritten_objects '
-                       + 'SELECT ?, x, ?, ?, ?, ?, ? '
+                       + 'SELECT ?, x, ?, ?, ?, ?, ?, ? '
                        + 'FROM (SELECT max(CAST(objs.version as integer)) AS x '
                        + '      FROM versioned_objects objs '
                        + '      WHERE objs.path = ?);',
@@ -290,6 +292,10 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
                 }, {}));
             } : thenDo;
         query(this.db, sql, [], whenDone);
+    },
+
+    getLastRegistryId: function(whenDone) {
+        query(this.db, 'SELECT registry_id + additions_count AS lastId FROM rewritten_objects ORDER BY lastId DESC LIMIT 1;', [], whenDone);
     }
 
 }));

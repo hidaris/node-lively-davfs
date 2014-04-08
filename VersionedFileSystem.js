@@ -67,6 +67,10 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                 lively.require('lively.ast.Rewriting').toRun(function() {
                     // TODO: load registry from database
                     self.astRegistry = lively.ast.Rewriting.setCurrentASTRegistry([]);
+                    self.storage.getLastRegistryId(function(err, result) {
+                        if (!err)
+                            self.astRegistry[result.lastId] = undefined;
+                    });
                 });
             });
         }
@@ -181,6 +185,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                     record.rewritten = '(function() {\n' + rewrittenCode + '\n' + declarationForGlobals(rewrittenAst) + '\n})();';
                     record.registryId = astId;
                     record.registryAdditions = JSON.stringify(this.astRegistry.slice(astId + 1));
+                    record.additionsCount = this.astRegistry.length - astId - 1;
                     record.ast = JSON.stringify(this.astRegistry[astId], function(key, value) {
                         if (this.type == 'Literal' && this.value instanceof RegExp && key == 'value')
                             return { regexp: this.raw };
