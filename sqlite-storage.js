@@ -219,7 +219,8 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         //   newer: [DATE|STRING], -- last mod newer
         //   older: [DATE|STRING], -- last mod older
         //   limit: [NUMBER],
-        //   rewritten: BOOL -- return rewritten version as content
+        //   rewritten: BOOL, -- return rewritten version as content
+        //   astIndex: [NUMBER], -- only if rewritten = true, AST index to lookup
         // }
         spec = spec || {};
         // SELECT caluse
@@ -269,6 +270,9 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
                   + "FROM versioned_objects objs2 WHERE objs2.path = objs.path)";
         } else if (spec.version !== undefined) {
             where += " AND objs.version = " + spec.version;
+        }
+        if (spec.astIndex) {
+            where += " AND " + spec.astIndex + " BETWEEN reObjs.registry_id AND (reObjs.registry_id + reObjs.additions_count)";
         }
         // ORDER BY
         var orderBy;
