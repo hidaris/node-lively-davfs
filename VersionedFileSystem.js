@@ -189,12 +189,15 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                     record.ast = JSON.stringify(this.astRegistry[astId], function(key, value) {
                         if (this.type == 'Literal' && this.value instanceof RegExp && key == 'value')
                             return { regexp: this.raw };
+                        else if (key == 'loc' && value.hasOwnProperty('start') && value.hasOwnProperty('end'))
+                            return; // omit locations
                         else
                             return value;
                     }).replace(/\{"regexp":("\/.*?\/[gimy]*")\}/g, 'eval($1)');
                     lively.ast.acorn.rematchAstWithSource(rewrittenAst.body[0], record.rewritten, true, 'body.0.expression.callee.body.body.0');
                     // TODO: make lively.ast.SourceMap.Generator.mapForASTs work?!
                     record.sourceMap = mapForASTs(ast, rewrittenAst, path.basename(record.path));
+                    console.log('Done rewriting ' + record.path + '...');
                 } catch (e) {
                     console.error('Could not rewrite ' + record.path + ' (' + e.message + ')!');
                 }
