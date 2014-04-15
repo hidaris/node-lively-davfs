@@ -56,7 +56,9 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         if (!options.fs) this.emit('error', 'VersionedFileSystem needs location!');
         this.storage = new SQLiteStore(options);
         this.rootDirectory = options.fs;
-        this.enableRewriting = !!options.enableRewriting;
+        this.enableRewriting = !!options.enableRewriting; // default: false
+        this.enableRewriteOnStart = this.enableRewriting && !!options.enableRewriteOnStart; // default: false
+        this.bootstrapRewriteFiles = options.bootstrapRewriteFiles || [];
         this.excludedDirectories = lvFsUtil.stringOrRegExp(options.excludedDirectories) || [];
         this.excludedFiles = lvFsUtil.stringOrRegExp(options.excludedFiles) || [];
         this.includedFiles = lvFsUtil.stringOrRegExp(options.includedFiles) || undefined;
@@ -164,7 +166,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             if (record.path)
                 record.path = this.normalizePath(record.path);
 
-            if (this.enableRewriting) {
+            if (this.enableRewriting && (this.enableRewriteOnStart || (this.bootstrapRewriteFiles.indexOf(record.path) >= 0) || !options.onlyImportNew)) {
                 var ext = path.extname(record.path).toLowerCase();
                 var rewriteExclude = [
                     "core/lively/bootstrap.js",

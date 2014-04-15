@@ -86,15 +86,20 @@ util._extend(Repository.prototype, d.bindMethods({
             toCommit = [];
         for (var i = 0; i < q.length; i++) {
             if (!q[i].canBeCommitted()) break;
-            toCommit.push(q[i].record);
+            toCommit.push(q[i]);
         }
         log("Commiting %s changes to DB", toCommit.length);
         if (!toCommit.length) return;
         repo.pendingChangeQueue.splice(0, toCommit.length);
-        repo.fs.addVersions(toCommit, {}, function(err, version) {
+        repo.fs.addVersions(toCommit.map(function(elem) { return elem.record; }), {}, function(err, version) {
             if (err) {
                 console.error('error in addVersions for records ', toCommit);
             }
+            toCommit.forEach(function(change) {
+                // FIXME: should check that change and version correlate
+                if (change && change.callback instanceof Function)
+                    change.callback(version);
+            });
             if (!repo.pendingChangeQueue.length) {
                 log("all pending changes processed");
                 repo.emit('synchronized');

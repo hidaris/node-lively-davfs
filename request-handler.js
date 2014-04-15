@@ -31,6 +31,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         options.includedFiles = options.includedFiles || undefined/*allow all*/;
         this.enableVersioning = options.enableVersioning === undefined || !!options.enableVersioning; // default: true
         this.enableRewriting = this.enableVersioning && !!options.enableRewriting; // default: false
+        this.bootstrapRewriteFiles = options.bootstrapRewriteFiles || [];
         this.resetDatabase = !!options.resetDatabase;
         this.repository = new Repository(options);
         this.timemachineSettings = (function tmSetup(tmOptions) {
@@ -179,7 +180,6 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         }, function(err, records) {
             function handleReadResult(err, content) {
                 if (!err) {
-                    res.status(200).end(content);
                     content = content.toString();
                     var record = {
                         change: 'rewrite',
@@ -193,7 +193,13 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
                     repo.pendingChangeQueue.push({
                         record: record,
                         canBeCommitted: function() { return true; },
-                        startTime: Date.now()
+                        startTime: Date.now(),
+                        callback: function(versionRecord) {
+                            if (versionRecord && versionRecord.rewritten)
+                                res.status(200).end(versionRecord.rewritten);
+                            else
+                                res.status(200).end(content);
+                        }
                     });
                     repo.commitPendingChanges();
                 } else {
@@ -218,41 +224,7 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
     },
 
     handleRewrittenCodeMapRequest: function(req, res, next) {
-        // TODO: Determine necessary modules for world load,
-        //       the rest of the AST registry can be lazily be loaded from the server later
-        var files = [
-            // 'core/lib/lively-libs-debug.js',
-            'core/lively/Migration.js',
-            'core/lively/JSON.js',
-            'core/lively/lang/Object.js',
-            'core/lively/lang/Function.js',
-            'core/lively/lang/String.js',
-            'core/lively/lang/Array.js',
-            'core/lively/lang/Number.js',
-            'core/lively/lang/Date.js',
-            'core/lively/lang/Worker.js',
-            'core/lively/lang/LocalStorage.js',
-            'core/lively/defaultconfig.js',
-            'core/lively/Base.js',
-            'core/lively/ModuleSystem.js',
-            'core/lively/Traits.js',
-            'core/lively/DOMAbstraction.js',
-            'core/lively/IPad.js',
-            'core/lively/LogHelper.js',
-            'core/lively/lang/Closure.js',
-            'core/lively/lang/UUID.js',
-            //
-            'core/lively/bindings/Core.js',
-            'core/lively/persistence/Serializer.js',
-            'core/lively/Main.js',
-            'core/lively/net/WebSockets.js',
-            'core/cop/Layers.js',
-            'core/lively/OldModel.js',
-            'core/lively/Data.js',
-            'core/lively/Network.js',
-            // neccessary to be able to load everything else dynamically
-            'core/lively/store/Interface.js'
-        ];
+        var files = this.bootstrapRewriteFiles;
         this.repository.getRecords({
             paths: files,
             attributes: ['ast', 'registry_id', 'registry_additions'],

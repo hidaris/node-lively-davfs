@@ -145,7 +145,7 @@ function storeVersionedObjects(db, dataAccessors, options, thenDo) {
                 if (taskCount > 0) return;
                 versionStmt.finalize();
                 console.log("stored new versions of %s objects", importCount);
-                thenDo && thenDo();
+                thenDo && thenDo(null, data);
             }
         });
     }
