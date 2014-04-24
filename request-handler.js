@@ -238,12 +238,15 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
                 "window.LivelyDebuggingASTRegistry=[];"
             ];
             records.each(function(record) {
-                code.push('window.LivelyDebuggingASTRegistry[' + record.registry_id + ']=' + record.ast + ';')
+                code.push('window.LivelyDebuggingASTRegistry[' + record.registry_id + ']=' + record.ast + ';');
                 var moreRegistry = JSON.parse(record.registry_additions);
                 moreRegistry.each(function(entry, idx) {
                     code.push('window.LivelyDebuggingASTRegistry[' + (record.registry_id + idx + 1) + ']=' + JSON.stringify(entry) + ';');
                 });
             });
+            var registry = lively && lively.ast && lively.ast.Rewriting && lively.ast.Rewriting.getCurrentASTRegistry(),
+                registryLength = registry ? registry.length : 9999999;
+            code.push('window.LivelyDebuggingASTRegistry[' + registryLength + ']=undefined;');
             res.setHeader('content-type', 'application/javascript;charset=utf8')
             res.end(code.join('\n'));
         });

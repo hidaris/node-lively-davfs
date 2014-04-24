@@ -67,11 +67,10 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             var self = this;
             lkLoader.start({ rootPath: this.rootDirectory + '/' }, function() {
                 lively.require('lively.ast.Rewriting').toRun(function() {
-                    // TODO: load registry from database
                     self.astRegistry = lively.ast.Rewriting.setCurrentASTRegistry([]);
                     self.storage.getLastRegistryId(function(err, result) {
-                        if (!err)
-                            self.astRegistry[result.lastId] = undefined;
+                        if (!err && result.length == 1)
+                            self.astRegistry[result[0].lastId] = undefined;
                     });
                 });
             });
