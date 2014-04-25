@@ -181,7 +181,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                     }
                     try {
                         var astId = this.astRegistry.length;
-                        var ast = lively.ast.acorn.parse(record.content, { locations: true });
+                        var ast = lively.ast.acorn.parse(record.content, { locations: true, directSourceFile: record.path });
                         var rewrittenAst = lively.ast.Rewriting.rewrite(ast, this.astRegistry);
                         var rewrittenCode = escodegen.generate(rewrittenAst);
                         record.rewritten = '(function() {\n' + rewrittenCode + '\n' + declarationForGlobals(rewrittenAst) + '\n})();';
@@ -193,6 +193,8 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
                                 return { regexp: this.raw };
                             else if (key == 'loc' && value.hasOwnProperty('start') && value.hasOwnProperty('end'))
                                 return; // omit locations
+                            else if (key == 'sourceFile' && ['Program', 'FunctionExpression', 'FunctionDeclaration'].indexOf(this.type) == -1)
+                                return; // omit sourceFile for nodes other then Program, FunctionExpression and FunctionDeclaration
                             else
                                 return value;
                         }).replace(/\{"regexp":("\/.*?\/[gimy]*")\}/g, 'eval($1)');
