@@ -95,6 +95,16 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
             // FIXME: temporary divert files named DBG_*.js
             this.handleRewrittenCodeRequest(req, res, next);
         } else {
+            // Fix URL to allow non-root installations
+            // In Apache config, set:
+            //   RequestHeader set x-lively-proxy-path /[your-path]
+            var path = '';
+            if (req.headers['x-lively-proxy-path']) {
+                path = req.headers['x-lively-proxy-path'];
+                if (path.substr(-1) == '/') path = path.substr(0, path.length - 1);
+            }
+            this.server.baseUri = path + '/';
+            req.url = path + req.url;
             new DavHandler(this.server, req, res);
         }
     },
