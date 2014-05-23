@@ -240,7 +240,7 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         // JOIN clause
         var join = !spec.rewritten ? '' : 'LEFT JOIN rewritten_objects reObjs USING (path, version)';
         // WHERE clause
-        var where = 'WHERE';
+        var where = 'WHERE' + (spec.rewritten ? ' reObjs.path IS NOT NULL AND' : '');
         where += ' ('
                + (spec.paths ?
                   spec.paths.map(function(path) {
