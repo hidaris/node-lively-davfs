@@ -1,6 +1,6 @@
 {
   "name": "lively-davfs",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Manager for versioning and reading / writing resources.",
   "main": "request-handler.js",
   "repository": {
@@ -29,7 +29,7 @@
     "sqlite3": "~2.1",
     "concat-stream": "~1.0",
     "source-map": ">=0.1.31",
-    "lively-loader": ">=0.1.0"
+    "lively-loader": ">=0.1.1"
   },
   "devDependencies": {
     "nodeunit": "~0.8",
