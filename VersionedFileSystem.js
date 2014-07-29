@@ -57,7 +57,6 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
         this.storage = new SQLiteStore(options);
         this.rootDirectory = options.fs;
         this.enableRewriting = !!options.enableRewriting; // default: false
-        this.enableRewriteOnStart = this.enableRewriting && !!options.enableRewriteOnStart; // default: false
         this.bootstrapRewriteFiles = options.bootstrapRewriteFiles || [];
         this.excludedDirectories = lvFsUtil.stringOrRegExp(options.excludedDirectories) || [];
         this.excludedFiles = lvFsUtil.stringOrRegExp(options.excludedFiles) || [];
@@ -165,46 +164,35 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             if (record.path)
                 record.path = this.normalizePath(record.path);
 
-            if (this.enableRewriting && (this.enableRewriteOnStart || (this.bootstrapRewriteFiles.indexOf(record.path) >= 0) || !options.onlyImportNew)) {
-                var ext = path.extname(record.path).toLowerCase();
-                var rewriteExclude = [
-                    "core/lively/bootstrap.js",
-                    "core/lively/ast/Rewriting.js",
-                    "core/lively/ast/StackReification.js",
-                    "core/lively/ast/BootstrapDebugger.js"
-                ];
-                if (ext == '.js') {
-                    if ((rewriteExclude.indexOf(record.path) >= 0) || (record.path.substr(0, 9) == 'core/lib/') ||
-                        (path.basename(record.path).substr(0, 4) == 'DBG_')) {
-                        console.log('Skipping ' + record.path + ' from rewriting...');
-                        return;
-                    }
-                    try {
-                        var astId = this.astRegistry.length;
-                        var ast = lively.ast.acorn.parse(record.content, { locations: true, directSourceFile: record.path });
-                        var rewrittenAst = lively.ast.Rewriting.rewrite(ast, this.astRegistry);
-                        var rewrittenCode = escodegen.generate(rewrittenAst);
-                        record.rewritten = '(function() {\n' + rewrittenCode + '\n' + declarationForGlobals(rewrittenAst) + '\n})();';
-                        record.registryId = astId;
-                        record.registryAdditions = JSON.stringify(this.astRegistry.slice(astId + 1));
-                        record.additionsCount = this.astRegistry.length - astId - 1;
-                        record.ast = JSON.stringify(this.astRegistry[astId], function(key, value) {
-                            if (this.type == 'Literal' && this.value instanceof RegExp && key == 'value')
-                                return { regexp: this.raw };
-                            else if (key == 'loc' && value.hasOwnProperty('start') && value.hasOwnProperty('end'))
-                                return; // omit locations
-                            else if (key == 'sourceFile' && ['Program', 'FunctionExpression', 'FunctionDeclaration'].indexOf(this.type) == -1)
-                                return; // omit sourceFile for nodes other then Program, FunctionExpression and FunctionDeclaration
-                            else
-                                return value;
-                        }).replace(/\{"regexp":("\/.*?\/[gimy]*")\}/g, 'eval($1)');
-                        lively.ast.acorn.rematchAstWithSource(rewrittenAst.body[0], record.rewritten, true, 'body.0.expression.callee.body.body.0');
-                        // TODO: make lively.ast.SourceMap.Generator.mapForASTs work?!
-                        record.sourceMap = mapForASTs(ast, rewrittenAst, path.basename(record.path));
-                        console.log('Done rewriting ' + record.path + '...');
-                    } catch (e) {
-                        console.error('Could not rewrite ' + record.path + ' (' + e.message + ')!');
-                    }
+            if (this.enableRewriting && (this.bootstrapRewriteFiles.indexOf(record.path) >= 0)) {
+                try {
+                    var astId = this.astRegistry.length,
+                        ast = lively.ast.acorn.parse(record.content, { locations: true, directSourceFile: record.path }),
+                        rewrittenAst = lively.ast.Rewriting.rewrite(ast, this.astRegistry),
+                        rewrittenCode = escodegen.generate(rewrittenAst);
+                    record.rewritten = '(function() {\n' + rewrittenCode + '\n' + declarationForGlobals(rewrittenAst) + '\n})();';
+                    record.registryId = astId;
+                    record.registryAdditions = JSON.stringify(this.astRegistry.slice(astId + 1).map(function(ast) {
+                        // compact AST registry for BootstrapDebugger.js
+                        return { registryRef: astId, indexRef: ast.astIndex };
+                    }));
+                    record.additionsCount = this.astRegistry.length - astId - 1;
+                    record.ast = JSON.stringify(this.astRegistry[astId], function(key, value) {
+                        if (this.type == 'Literal' && this.value instanceof RegExp && key == 'value')
+                            return { regexp: this.raw };
+                        else if (key == 'loc' && value.hasOwnProperty('start') && value.hasOwnProperty('end'))
+                            return; // omit locations
+                        else if (key == 'sourceFile' && ['Program', 'FunctionExpression', 'FunctionDeclaration'].indexOf(this.type) == -1)
+                            return; // omit sourceFile for nodes other then Program, FunctionExpression and FunctionDeclaration
+                        else
+                            return value;
+                    }).replace(/\{"regexp":("\/.*?\/[gimy]*")\}/g, 'eval($1)');
+                    lively.ast.acorn.rematchAstWithSource(rewrittenAst.body[0], record.rewritten, true, 'body.0.expression.callee.body.body.0');
+                    // TODO: make lively.ast.SourceMap.Generator.mapForASTs work?!
+                    record.sourceMap = mapForASTs(ast, rewrittenAst, path.basename(record.path));
+                    console.log('Done rewriting ' + record.path + '...');
+                } catch (e) {
+                    console.error('Could not rewrite ' + record.path + ' (' + e.message + ')!');
                 }
             }
         }, this);

@@ -242,21 +242,57 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
             newest: true
         }, function(err, records) {
             var code = [
-                lively.ast.Rewriting.findNodeByAstIndexBaseDef,
                 lively.ast.Rewriting.createClosureBaseDef,
                 lively.ast.Rewriting.UnwindExceptionBaseDef,
                 "window.LivelyDebuggingASTRegistry=[];"
             ];
             records.each(function(record) {
-                code.push('window.LivelyDebuggingASTRegistry[' + record.registry_id + ']=' + record.ast + ';');
+                code.push('LivelyDebuggingASTRegistry[' + record.registry_id + ']=' + record.ast + ';');
                 var moreRegistry = JSON.parse(record.registry_additions);
                 moreRegistry.each(function(entry, idx) {
-                    code.push('window.LivelyDebuggingASTRegistry[' + (record.registry_id + idx + 1) + ']=' + JSON.stringify(entry) + ';');
+                    code.push('LivelyDebuggingASTRegistry[' + (record.registry_id + idx + 1) + ']=' + JSON.stringify(entry) + ';');
                 });
             });
             var registry = lively && lively.ast && lively.ast.Rewriting && lively.ast.Rewriting.getCurrentASTRegistry(),
                 registryLength = registry ? registry.length : 9999999;
-            code.push('window.LivelyDebuggingASTRegistry[' + registryLength + ']=undefined;');
+            code.push(
+                '\n// deoptimize AST registry\n' +
+                'window.LivelyDebuggingASTRegistry.forEach(function(node, idx) {\n' +
+                '    function findNodeByAstIndex(ast, astIndexToFind) {\n' +
+                '        if (ast.astIndex === astIndexToFind) return ast;\n' +
+                '        var i, j, node, nodes, found = null,\n' +
+                '            props = Object.getOwnPropertyNames(ast);\n' +
+                '        for (i = 0; i < props.length; i++) {\n' +
+                '            node = ast[props[i]];\n' +
+                '            if (node instanceof Array) {\n' +
+                '                nodes = node;\n' +
+                '                for (j = 0; j < nodes.length; j++) {\n' +
+                '                    node = nodes[j];\n' +
+                '                    if (node.key && node.value) {\n' +
+                '                        if (node.key.astIndex >= astIndexToFind)\n' +
+                '                            found = findNodeByAstIndex(node.key, astIndexToFind);\n' +
+                '                        else if (node.value.astIndex >= astIndexToFind)\n' +
+                '                            found = findNodeByAstIndex(node.value, astIndexToFind);\n' +
+                '                        if (found !== null) break;\n' +
+                '                        continue;\n' +
+                '                    } else if (!node || (node.type == null) || (node.astIndex < astIndexToFind)) continue;\n' +
+                '                    found = findNodeByAstIndex(node, astIndexToFind);\n' +
+                '                    if (found !== null) break;\n' +
+                '                }\n' +
+                '                if (found !== null) break;\n' +
+                '                continue;\n' +
+                '            } else if (!node || (node.type == null) || (node.astIndex < astIndexToFind)) continue;\n' +
+                '            found = findNodeByAstIndex(node, astIndexToFind);\n' +
+                '            if (found !== null) break;\n' +
+                '        }\n' +
+                '        return found;\n' +
+                '    }\n' +
+                '    if (node && node.hasOwnProperty("registryRef")) {\n' +
+                '        LivelyDebuggingASTRegistry[idx] = findNodeByAstIndex(LivelyDebuggingASTRegistry[node.registryRef], node.indexRef);\n' +
+                '        LivelyDebuggingASTRegistry[idx]._parentEntry = node.registryRef;\n' +
+                '    }\n' +
+                '});'
+            );
             res.setHeader('content-type', 'application/javascript;charset=utf8')
             res.end(code.join('\n'));
         });
