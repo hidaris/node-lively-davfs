@@ -28,11 +28,27 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
                 req = this.handler.httpRequest,
                 content = {buffer: null, isDone: false};
 
-            if (req.withDataDo) {
-                req.withDataDo(function(data) {
-                    content.buffer = data;
-                    content.isDone = true;
+            // rkrk 2014-08-31: We are using the streambuffer addition to read
+            // the content from a request here b/c if the DAV handler is invoked
+            // delayed (i.e. other handlers were processing the request before,
+            // asynchronously delaying other middlewares) then reading from the
+            // req stream directly will not give us the req body anymore. For
+            // this known issue all express apps (at least) seem to have the
+            // "streambuffer" component which provides ondata/onend handlers.
+            // ==> CAVEAT:
+            // It seems that streambuffer.ondata, streambuffer.onend is only
+            // good for *one* invocation. If there are multiple consumers
+            // subsequent ondata/onend invocations will not provide the request
+            // data!!!
+            // To work around this issue I added our own version of
+            // streambuffer to life_star and for the tests in this module to
+            // tests/tests.js (see installStreambuffer()).
+            if (req.streambuffer) {
+                req.streambuffer.ondata(function(d) {
+                    if (content.buffer) content.buffer = Buffer.concat([content.buffer, d])
+                    else content.buffer = d;
                 });
+                req.streambuffer.onend(function() { content.isDone = true; });
             } else {
                 var write = concat(function(data) {
                     content.buffer = data;

@@ -31,19 +31,41 @@ function closeServer(server, thenDo) {
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // request helpers
-function installWithDataDoMethod(req) {
-    var done = false, data = "", dataHandlers = [];
-    req.on("data", function(d) { data += d; });
-    req.on('end', function() {
-        done = true;
-        req.$data = data;
-        dataHandlers.forEach(function(ea) { ea.call(null, data); });
-    });
-    req.withDataDo = function(doFunc) {
-        if (done) { doFunc(data); }
-        else dataHandlers.push(doFunc)
-    };
+function installStreambuffer(req) {
+  function invokeCb(cb, arg) {
+    try { cb.call(null, arg); } catch (e) {
+      console.log("life_star streambuffer callback error: ", e);
+    }
+  }
+  
+  var done = false, data = null,
+    streamBufferDataHandlers = [],
+    streamBufferEndHandlers = [];
+  
+  req.on("data", function(d) {
+    if (data) data = Buffer.concat([data, d]);
+    else data = d;
+    streamBufferDataHandlers.forEach(function(ea) { invokeCb(ea, d) });
+  });
+  req.on('end', function() {
+    done = true;
+    streamBufferEndHandlers.forEach(function(ea) { invokeCb(ea) });
+    streamBufferDataHandlers = [];
+    streamBufferEndHandlers = [];
+  });
+  
+  req.streambuffer = {
+    ondata: function(cb) {
+        if (done)  invokeCb(cb, data); 
+        else streamBufferDataHandlers.push(cb);
+    },
+    onend: function(cb) {
+        if (done) invokeCb(cb);
+        else streamBufferEndHandlers.push(cb);
+    }
+  }
 }
+
 function put(path, content, thenDo) {
     var url = 'http://localhost:' + port + '/' + (path || '');
     request.put(url, {body: content}, function(err, res) {
@@ -88,11 +110,9 @@ var tests = {
                 });
                 testRepo = handler.repository;
                 testServer.on('request', function(req, res, next) {
+                    installStreambuffer(req);
                     if (handler.delay) {
-                        installWithDataDoMethod(req);
-                        setTimeout(function() {
-                            handler.handleRequest(req, res, next);
-                        }, handler.delay);
+                        setTimeout(handler.handleRequest.bind(handler, req, res, next), handler.delay);
                     } else {
                         handler.handleRequest(req, res, next);
                     }

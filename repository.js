@@ -91,7 +91,7 @@ util._extend(Repository.prototype, d.bindMethods({
             if (!q[i].canBeCommitted()) break;
             toCommit.push(q[i]);
         }
-        log("Commiting %s changes to DB", toCommit.length);
+        log("Commiting %s (change ids %s) changes to DB", toCommit.length, toCommit.map(function(change) { return change.id; }).join(','));
         if (!toCommit.length) return;
         repo.pendingChangeQueue.splice(0, toCommit.length);
         repo.fs.addVersions(toCommit.map(function(elem) { return elem.record; }), {}, function(err, version) {
