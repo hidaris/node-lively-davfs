@@ -9,6 +9,9 @@ var VersionedFileSystem = require('./VersionedFileSystem');
 var d = require('./domain');
 var log = require('./util').log;
 
+var counter = 0;
+function newID() { return ++counter; }
+
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // Repo
 function Repository(options) {
@@ -127,6 +130,7 @@ util._extend(Repository.prototype, d.bindMethods({
     captureDAVEvt: function(changeType, readBody, readStat, evt) {
         if (!evt.uri) { console.error('Error recording file change, no path', evt); return; }
         var taskData = {
+            id: newID(),
             record: {
                 version: undefined,
                 change: changeType,
@@ -142,6 +146,8 @@ util._extend(Repository.prototype, d.bindMethods({
             canBeCommitted: function() {
                 var waitForStat = readStat && !this.statRead,
                     waitForBody = readBody && !this.requestDataRead;
+                waitForBody && log("%s (change %s) cannot yet be committed because no file stat was read", evt.uri, this.id);
+                waitForStat && log("%s (change %s) cannot yet be committed because no request data was read", evt.uri, this.id);
                 return !waitForBody && !waitForStat;
             },
             startTime: Date.now(),
@@ -150,6 +156,7 @@ util._extend(Repository.prototype, d.bindMethods({
             request: evt.req,
             incomingContent: evt.content
         }
+        log("capturing DAV event %s (%s, %s)", taskData.id , taskData.request.method, taskData.record.path)
         this.pendingChangeQueue.push(taskData);
         readBody && this.startReadingRequestContent(taskData);
         if (!readBody && !readStat) this.commitPendingChanges();
@@ -173,6 +180,7 @@ util._extend(Repository.prototype, d.bindMethods({
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     // change processing
     startReadingRequestContent: function(change) {
+        log("startReadingRequestContent for change %s", change.id);
         var repo = this;
         if (!change.incomingContent) change.requestDataRead = true;
         if (change.requestDataRead) { this.commitPendingChanges(); return; }

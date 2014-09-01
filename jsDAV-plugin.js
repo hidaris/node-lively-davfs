@@ -1,10 +1,6 @@
 "use strict";
 
-function log(/*arguments*/) {
-    process.stdout.write('livelyDAV: ');
-    return console.log.apply(console, arguments);
-}
-
+var log = require('./util').log;
 var util = require('util');
 var concat = require('concat-stream')
 
@@ -13,6 +9,7 @@ var jsDAVPlugin = require("jsDAV/lib/DAV/plugin");
 
 var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
     name: "livelydav",
+
     initialize: function(handler) {
         this.handler = handler;
         this._putContent = null;
@@ -23,22 +20,37 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
         handler.addEventListener("beforeWriteContent", this.beforeWriteContent.bind(this));
         handler.addEventListener("beforeUnbind", this.beforeUnbind.bind(this));
     },
+
     beforeMethod: function(e, method) {
+        log("jsDAV event: beforeMethod %s", method);
         if (method.toLowerCase() === 'put') {
-            var req = this.handler.httpRequest,
-                content = {buffer: null, isDone: false},
-                write = concat(function(data) {
+            var handler = this.handler,
+                req = this.handler.httpRequest,
+                content = {buffer: null, isDone: false};
+
+            if (req.withDataDo) {
+                req.withDataDo(function(data) {
                     content.buffer = data;
-                    content.isDone = true });
-            write.on('error', function(err) {
-                console.error("error reading from DAV PUT request: ", err);
-            });
-            req.pipe(write);
+                    content.isDone = true;
+                });
+            } else {
+                var write = concat(function(data) {
+                    content.buffer = data;
+                    content.isDone = true;
+                });
+                write.on('error', function(err) {
+                    console.error("error reading from DAV PUT request: ", err);
+                });
+                req.pipe(write);
+            }
+
             this._putContent = content;
         }
         return e.next();
     },
+
     beforeWriteContent: function(e, uri, node) {
+        log("jsDAV event: beforeWriteContent %s", uri);
         var req = this.handler.httpRequest,
             username = global.lively&& global.lively.userData && global.lively.userData.getUserName(req);
         this.emit('fileChanged', {
@@ -49,11 +61,15 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
         this._putContent = null;
         return e.next();
     },
+
     afterWriteContent: function(e, uri) {
+        log("jsDAV event: afterWriteContent %s", uri);
         this.emit('afterFileChanged', {uri: uri});
         return e.next();
     },
+
     beforeCreateFile: function(e, uri, data, encoding, node) {
+        log("jsDAV event: beforeCreateFile %s", uri);
         var req = this.handler.httpRequest,
             username = global.lively&& global.lively.userData&& global.lively.userData.getUserName(req);
         this.emit('fileCreated', {
@@ -64,12 +80,16 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
         this._putContent = null;
         return e.next();
     },
+
     afterCreateFile: function(e, uri) {
+        log("jsDAV event: afterCreateFile %s", uri);
         var req = this.handler.httpRequest;
         this.emit('afterFileCreated', {uri: uri, req: req});
         return e.next();
     },
+
     beforeUnbind: function(e, uri) {
+        log("jsDAV event: beforeUnbind %s", uri);
         var req = this.handler.httpRequest,
             username = global.lively&& global.lively.userData&& global.lively.userData.getUserName(req);
         this.emit('fileDeleted', {uri: uri, req: this.handler.httpRequest, username: username});

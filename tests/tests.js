@@ -31,6 +31,19 @@ function closeServer(server, thenDo) {
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // request helpers
+function installWithDataDoMethod(req) {
+    var done = false, data = "", dataHandlers = [];
+    req.on("data", function(d) { data += d; });
+    req.on('end', function() {
+        done = true;
+        req.$data = data;
+        dataHandlers.forEach(function(ea) { ea.call(null, data); });
+    });
+    req.withDataDo = function(doFunc) {
+        if (done) { doFunc(data); }
+        else dataHandlers.push(doFunc)
+    };
+}
 function put(path, content, thenDo) {
     var url = 'http://localhost:' + port + '/' + (path || '');
     request.put(url, {body: content}, function(err, res) {
@@ -75,7 +88,14 @@ var tests = {
                 });
                 testRepo = handler.repository;
                 testServer.on('request', function(req, res, next) {
-                    handler.handleRequest(req, res, next);
+                    if (handler.delay) {
+                        installWithDataDoMethod(req);
+                        setTimeout(function() {
+                            handler.handleRequest(req, res, next);
+                        }, handler.delay);
+                    } else {
+                        handler.handleRequest(req, res, next);
+                    }
                 });
                 handler.registerWith(null, testServer, next)
             },
@@ -98,6 +118,7 @@ var tests = {
             test.done();
         });
     },
+
     testPutCreatesNewVersion: function(test) {
         test.expect(4);
         async.series([
@@ -116,6 +137,27 @@ var tests = {
             }
         ], test.done);
     },
+
+    testSlowPutProcessing: function(test) {
+        test.expect(4);
+        async.series([
+            function(next) {
+                handler.delay = 200;
+                put('aFile.txt', 'test');
+                testRepo.once('synchronized', next);
+            },
+            function(next) {
+                testRepo.getFiles(function(err, files) {
+                    test.equal(files.length, 1, '# files');
+                    test.equal(files[0].path, 'aFile.txt', 'file name');
+                    test.equal(files[0].change, 'contentChange', 'no change recorded');
+                    test.equal(files[0].content, 'test', 'no content recorded');
+                    next();
+                });
+            }
+        ], test.done);
+    },
+
     testDeleteIsRecorded: function(test) {
         var ts;
         test.expect(6);
