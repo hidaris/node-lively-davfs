@@ -237,27 +237,30 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
         var files = this.bootstrapRewriteFiles;
         this.repository.getRecords({
             paths: files,
-            attributes: ['ast', 'registry_id', 'registry_additions'],
+            attributes: ['path', 'ast', 'registry_id', 'registry_additions'],
             rewritten: true,
             newest: true
         }, function(err, records) {
             var code = [
                 lively.ast.Rewriting.createClosureBaseDef,
                 lively.ast.Rewriting.UnwindExceptionBaseDef,
-                "window.LivelyDebuggingASTRegistry=[];"
+                "window.LivelyDebuggingASTRegistry={};"
             ];
+            var subRegistries = [];
             records.each(function(record) {
-                code.push('LivelyDebuggingASTRegistry[' + record.registry_id + ']=' + record.ast + ';');
+                if (subRegistries.indexOf(record.path) == -1) {
+                    code.push('LivelyDebuggingASTRegistry["' + record.path + '"]=[];');
+                    subRegistries.push(record.path);
+                }
+                code.push('LivelyDebuggingASTRegistry["' + record.path + '"][' + record.registry_id + ']=' + record.ast + ';');
                 var moreRegistry = JSON.parse(record.registry_additions);
                 moreRegistry.each(function(entry, idx) {
-                    code.push('LivelyDebuggingASTRegistry[' + (record.registry_id + idx + 1) + ']=' + JSON.stringify(entry) + ';');
+                    code.push('LivelyDebuggingASTRegistry["' + record.path + '"][' + (record.registry_id + idx + 1) + ']=' + JSON.stringify(entry) + ';');
                 });
             });
-            var registry = lively && lively.ast && lively.ast.Rewriting && lively.ast.Rewriting.getCurrentASTRegistry(),
-                registryLength = registry ? registry.length : 9999999;
             code.push(
                 '\n// deoptimize AST registry\n' +
-                'window.LivelyDebuggingASTRegistry.forEach(function(node, idx) {\n' +
+                'Object.getOwnPropertyNames(LivelyDebuggingASTRegistry).forEach(function(namespace) {\n' +
                 '    function findNodeByAstIndex(ast, astIndexToFind) {\n' +
                 '        if (ast.astIndex === astIndexToFind) return ast;\n' +
                 '        var i, j, node, nodes, found = null,\n' +
@@ -287,11 +290,13 @@ util._extend(LivelyFsHandler.prototype, d.bindMethods({
                 '        }\n' +
                 '        return found;\n' +
                 '    }\n' +
-                '    if (node && node.hasOwnProperty("registryRef")) {\n' +
-                '        LivelyDebuggingASTRegistry[idx] = findNodeByAstIndex(LivelyDebuggingASTRegistry[node.registryRef], node.indexRef);\n' +
-                '        LivelyDebuggingASTRegistry[idx]._parentEntry = node.registryRef;\n' +
-                '    }\n' +
-                '});'
+                '    LivelyDebuggingASTRegistry[namespace].forEach(function(node, idx) {\n' +
+                '        if (node && node.hasOwnProperty("registryRef")) {\n' +
+                '            LivelyDebuggingASTRegistry[namespace][idx] = findNodeByAstIndex(LivelyDebuggingASTRegistry[namespace][node.registryRef], node.indexRef);\n' +
+                '            LivelyDebuggingASTRegistry[namespace][idx]._parentEntry = node.registryRef;\n' +
+                '        }\n' +
+                '    });\n' +
+                '});\n'
             );
             res.setHeader('content-type', 'application/javascript;charset=utf8')
             res.end(code.join('\n'));

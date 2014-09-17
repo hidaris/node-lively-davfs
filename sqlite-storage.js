@@ -298,8 +298,11 @@ util._extend(SQLiteStore.prototype, d.bindMethods({
         query(this.db, sql, [], whenDone);
     },
 
-    getLastRegistryId: function(whenDone) {
-        query(this.db, 'SELECT registry_id + additions_count AS lastId FROM rewritten_objects ORDER BY lastId DESC LIMIT 1;', [], whenDone);
+    getLastRegistryId: function(namespace, whenDone) {
+        query(this.db, "SELECT registry_id + additions_count AS lastId "
+                     + "FROM rewritten_objects "
+                     + "WHERE path = '" + namespace.replace(/\'/g, "''") + "' "
+                     + "ORDER BY lastId DESC LIMIT 1;", [], whenDone);
     }
 
 }));

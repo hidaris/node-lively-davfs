@@ -66,11 +66,7 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             var self = this;
             lkLoader.start({ rootPath: this.rootDirectory + '/' }, function() {
                 lively.require('lively.ast.Rewriting').toRun(function() {
-                    self.astRegistry = lively.ast.Rewriting.setCurrentASTRegistry([]);
-                    self.storage.getLastRegistryId(function(err, result) {
-                        if (!err && result.length == 1)
-                            self.astRegistry[result[0].lastId] = undefined;
-                    });
+                    self.astRegistry = lively.ast.Rewriting.setCurrentASTRegistry({});
                 });
             });
         }
@@ -164,36 +160,41 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             if (record.path)
                 record.path = this.normalizePath(record.path);
 
-            if (this.enableRewriting && (this.bootstrapRewriteFiles.indexOf(record.path) >= 0)) {
-                try {
-                    var astId = this.astRegistry.length,
-                        ast = lively.ast.acorn.parse(record.content, { locations: true, directSourceFile: record.path }),
-                        rewrittenAst = lively.ast.Rewriting.rewrite(ast, this.astRegistry),
-                        rewrittenCode = escodegen.generate(rewrittenAst);
-                    record.rewritten = '(function() {\n' + rewrittenCode + '\n' + declarationForGlobals(rewrittenAst) + '\n})();';
-                    record.registryId = astId;
-                    record.registryAdditions = JSON.stringify(this.astRegistry.slice(astId + 1).map(function(ast) {
-                        // compact AST registry for BootstrapDebugger.js
-                        return { registryRef: astId, indexRef: ast.astIndex };
-                    }));
-                    record.additionsCount = this.astRegistry.length - astId - 1;
-                    record.ast = JSON.stringify(this.astRegistry[astId], function(key, value) {
-                        if (this.type == 'Literal' && this.value instanceof RegExp && key == 'value')
-                            return { regexp: this.raw };
-                        else if (key == 'loc' && value.hasOwnProperty('start') && value.hasOwnProperty('end'))
-                            return; // omit locations
-                        else if (key == 'sourceFile' && ['Program', 'FunctionExpression', 'FunctionDeclaration'].indexOf(this.type) == -1)
-                            return; // omit sourceFile for nodes other then Program, FunctionExpression and FunctionDeclaration
-                        else
-                            return value;
-                    }).replace(/\{"regexp":("\/.*?\/[gimy]*")\}/g, 'eval($1)');
-                    lively.ast.acorn.rematchAstWithSource(rewrittenAst.body[0], record.rewritten, true, 'body.0.expression.callee.body.body.0');
-                    // TODO: make lively.ast.SourceMap.Generator.mapForASTs work?!
-                    record.sourceMap = mapForASTs(ast, rewrittenAst, path.basename(record.path));
-                    console.log('Done rewriting ' + record.path + '...');
-                } catch (e) {
-                    console.error('Could not rewrite ' + record.path + ' (' + e.message + ')!');
-                }
+            if (this.enableRewriting && (this.bootstrapRewriteFiles.indexOf(record.path) > -1)) {
+                this.storage.getLastRegistryId(record.path, function(err, result) {
+                    try {
+                        if (err) throw err;
+                        var astId = (result.length == 1 ?  result[0].lastId : 0);
+                        this.astRegistry[record.path] = Array(astId);
+                        var ast = lively.ast.acorn.parse(record.content, { locations: true, directSourceFile: record.path }),
+                            rewrittenAst = lively.ast.Rewriting.rewrite(ast, this.astRegistry, record.path),
+                            rewrittenCode = escodegen.generate(rewrittenAst);
+                        record.rewritten = '(function() {\n' + rewrittenCode + '\n' + declarationForGlobals(rewrittenAst) + '\n})();';
+                        record.registryId = astId;
+                        record.registryAdditions = JSON.stringify(this.astRegistry[record.path].slice(astId + 1).map(function(ast) {
+                            // compact AST registry for BootstrapDebugger.js
+                            return { registryRef: astId, indexRef: ast.astIndex };
+                        }));
+                        record.additionsCount = this.astRegistry[record.path].length - astId - 1;
+                        record.ast = JSON.stringify(this.astRegistry[record.path][astId], function(key, value) {
+                            if (this.type == 'Literal' && this.value instanceof RegExp && key == 'value')
+                                return { regexp: this.raw };
+                            else if (key == 'loc' && value.hasOwnProperty('start') && value.hasOwnProperty('end'))
+                                return; // omit locations
+                            else if (key == 'sourceFile' && ['Program', 'FunctionExpression', 'FunctionDeclaration'].indexOf(this.type) == -1)
+                                return; // omit sourceFile for nodes other then Program, FunctionExpression and FunctionDeclaration
+                            else
+                                return value;
+                        }).replace(/\{"regexp":("\/.*?\/[gimy]*")\}/g, 'eval($1)');
+                        lively.ast.acorn.rematchAstWithSource(rewrittenAst.body[0], record.rewritten, true, 'body.0.expression.callee.body.body.0');
+                        // TODO: make lively.ast.SourceMap.Generator.mapForASTs work?!
+                        record.sourceMap = mapForASTs(ast, rewrittenAst, path.basename(record.path));
+                        console.log('Done rewriting ' + record.path + '...');
+                    } catch (e) {
+                        console.error('Could not rewrite ' + record.path + '!');
+                        console.error(e);
+                    }
+                }.bind(this));
             }
         }, this);
         this.storage.storeAll(versionDatasets, options, thenDo);
