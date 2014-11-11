@@ -197,7 +197,7 @@ util._extend(Repository.prototype, d.bindMethods({
                 this, change), 500);
             return;
         }
-        change.record.content = change.incomingContent.buffer.toString();
+        change.record.content = (change.incomingContent.buffer || '').toString();
         change.requestDataRead = true;
         log("content for %s read", change.record.path);
         repo.commitPendingChanges();
