@@ -2,7 +2,7 @@
 
 var log = require('./util').log;
 var util = require('util');
-var concat = require('concat-stream')
+var concat = require('concat-stream');
 
 var EventEmitter = require('events').EventEmitter;
 var jsDAVPlugin = require("jsDAV/lib/DAV/plugin");
@@ -68,7 +68,7 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
     beforeWriteContent: function(e, uri, node) {
         log("jsDAV event: beforeWriteContent %s", uri);
         var req = this.handler.httpRequest,
-            username = global.lively&& global.lively.userData && global.lively.userData.getUserName(req);
+            username = global.lively && global.lively.userData && global.lively.userData.getUserName(req);
         this.emit('fileChanged', {
             username: username,
             uri: uri,
@@ -87,7 +87,7 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
     beforeCreateFile: function(e, uri, data, encoding, node) {
         log("jsDAV event: beforeCreateFile %s", uri);
         var req = this.handler.httpRequest,
-            username = global.lively&& global.lively.userData&& global.lively.userData.getUserName(req);
+            username = global.lively && global.lively.userData && global.lively.userData.getUserName(req);
         this.emit('fileCreated', {
             username: username,
             uri: uri,
@@ -107,7 +107,7 @@ var livelyDAVPlugin = module.exports = jsDAVPlugin.extend({
     beforeUnbind: function(e, uri) {
         log("jsDAV event: beforeUnbind %s", uri);
         var req = this.handler.httpRequest,
-            username = global.lively&& global.lively.userData&& global.lively.userData.getUserName(req);
+            username = global.lively && global.lively.userData && global.lively.userData.getUserName(req);
         this.emit('fileDeleted', {uri: uri, req: this.handler.httpRequest, username: username});
         return e.next();
     }
