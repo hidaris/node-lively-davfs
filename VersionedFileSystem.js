@@ -262,9 +262,8 @@ util._extend(VersionedFileSystem.prototype, d.bindMethods({
             ended = false;
         find.on('directory', function (dir, stat, stop) {
             var relPath = path.relative(root, dir);
+            if (self.isExcludedDir(relPath)) return stop();
             result.directories.push({path: relPath, stat: stat});
-            var base = path.basename(relPath);
-            if (self.isExcludedDir(base)) stop();
         });
         find.on('file', function (file, stat) {
             var relPath = path.relative(root, file);
