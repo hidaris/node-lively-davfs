@@ -1,4 +1,4 @@
-"use strict"
+"use strict";
 
 var util = require("util");
 var EventEmitter = require("events").EventEmitter;
@@ -35,16 +35,23 @@ function processFile(lvfs, fi, thenDo) {
     }
 
     function handleReadResult(err, content) {
-        if (!err) {
-            lvfs.createVersionRecord({
-                path: fi.path,
-                stat: fi.stat,
-                content: content
-            }, thenDo);
-        } else {
+        if (err) {
             console.error('error reading file %s:', fi.path, err);
             thenDo(err);
+            return;
         }
+
+        if (fi.stat.size === 0 && !fi.stat.mime) {
+            console.error('file %s has not content, skipping versioning it', fi.path);
+            thenDo(null, null);
+            return;
+        }
+
+        lvfs.createVersionRecord({
+            path: fi.path,
+            stat: fi.stat,
+            content: content
+        }, thenDo);
     }
 }
 
@@ -52,7 +59,8 @@ function processBatch(lvfs, batch, thenDo) {
     async.mapSeries(batch,
         function(fileinfo, next) { processFile(lvfs, fileinfo, next); },
         function(err, fileRecords) {
-            lvfs.addVersions(fileRecords, {onlyImportNew: true}, thenDo); });
+            lvfs.addVersions(fileRecords.select(function(ea) { return !!ea; }),
+                             {onlyImportNew: true}, thenDo); });
 }
 
 function createBatches(files, thenDo) {
