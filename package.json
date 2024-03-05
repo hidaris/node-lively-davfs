@@ -21,18 +21,18 @@
   },
   "license": "MIT",
   "dependencies": {
-    "jsDAV": "https://github.com/LivelyKernel/jsDAV/tarball/windows-compat-nodejs-0.12",
+    "jsDAV": "github:LivelyKernel/jsDAV#windows-compat-nodejs-0.12",
     "restify": ">=4.1.0",
     "findit": "~1.1",
     "request": ">=2.68.0",
     "async": "~0.9",
-    "sqlite3": "^4",
+    "sqlite3": "^5.0.2",
     "concat-stream": "~1.0",
     "source-map": "^0.4.2",
     "lively-loader": ">=0.2.2"
   },
   "devDependencies": {
     "nodeunit": "~0.8",
-    "lively-fs-helper": "https://github.com/rksm/lively-fs-helper/tarball/master"
+    "lively-fs-helper": "git+https://github.com/rksm/lively-fs-helper"
   }
 }
